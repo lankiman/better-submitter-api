@@ -1,0 +1,54 @@
+# Compiled source
+*.dll
+*.exe
+*.so
+*.dylib
+*.pdb
+*.cache
+
+# Directories
+bin/
+obj/
+.vs/
+.idea/
+.idea_modules/
+.idea/*
+
+# Logs
+*.log
+
+# JetBrains Rider-specific files
+.idea/
+*.sln.iml
+*.sln.ide.*
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Config
+appsettings*.json
+launchSettings.json
+
+# Temporary files
+*.tmp
+*.temp
+
+# Rider caches (optional, depends on whether you use shared settings)
+.idea/workspace.xml
+.idea/usage.statistics.xml
+.idea/dictionaries
+.idea/shelf/
+
+# File-based project model caches
+.idea/.idea_modules.xml
+.idea/modules.xml
+.idea/misc.xml
+.idea/vcs.xml
+.idea/runConfigurations.xml
+.idea/tasks.xml
+
+# Rider's solution-wide analysis caches
+.idea/.solution-wide

@@ -1,0 +1,6 @@
+@better_submitter_api_HostAddress = http://localhost:5239
+
+GET {{better_submitter_api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -4,23 +4,28 @@ public class GeneralDataModel
 {
     public string StudentId { get; set; } 
     public StudentDepartment Department { get; set; }
-}
-
-public class SubmissionDataModel:GeneralDataModel
-{
+    
     public string SurnName { get; set; }
     
     public string FirstName { get; set; }
     
     public string? MiddleName { get; set; }
+}
+
+public class SubmissionDataModel
+{
+    public string StudentId { get; set; } 
     
-    public Dictionary<int,AssignmentSubmisssion> SubmitedAssigmentFiles { get; set; }
+    public StudentDepartment Department { get; set; }
     
-    public Dictionary<int,AssignmentSubmisssion> SubmitedAssigmentVideos { get; set; }
+    public Dictionary<int,AssignmentSubmisssion> SubmitedAssigmentCodeFiles { get; set; }
+    
+    public Dictionary<int,AssignmentSubmisssion> SubmitedAssigmentVideoFiles { get; set; }
 }
 
 public class AssignmentSubmisssion
 {
+    public int AssignmentNumber { get; set; }
     public int SubmissionCount { get; set; }
     public bool CanBeResubmitted { get; set; }
 }
@@ -45,5 +50,7 @@ public enum GeneralSubmissionDataStatus
 {
     Present,
     Added,
-    Failed
+    Failed,
+    NotPresent,
+    Updated
 }

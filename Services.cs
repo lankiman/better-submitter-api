@@ -19,9 +19,9 @@ public static class Services
     
     private static Dictionary<string, GeneralDataModel> GeneralSubmissionData { get; set; } = new();
     
-    private static Dictionary<string, GeneralDataModel> CSubmissionData { get; set; } = new();
+    private static Dictionary<string, SubmissionDataModel> CSubmissionData { get; set; } = new();
     
-    private static Dictionary<string, GeneralDataModel> PythonSubmissionData { get; set; } = new();
+    private static Dictionary<string, SubmissionDataModel> PythonSubmissionData { get; set; } = new();
     
     
     static Services()
@@ -52,6 +52,18 @@ public static class Services
             var data= File.ReadAllLines(_generalDataPath).ToList();
             GeneralSubmissionData = data.ConvertToGeneralDataModel();
         }
+        
+        if (IsFileExist(_pythongDataPath))
+        {
+            var data= File.ReadAllLines(_pythongDataPath).ToList();
+            PythonSubmissionData = data.ConvertToSubmissionsDataModel();
+        }
+        
+        if (IsFileExist(_cDataPath))
+        {
+            var data= File.ReadAllLines(_cDataPath).ToList();
+            CSubmissionData = data.ConvertToSubmissionsDataModel();
+        }
        
     }
     
@@ -65,9 +77,41 @@ public static class Services
                 lineData => new GeneralDataModel
                 {
                     StudentId = lineData[0],
-                    Department = Enum.Parse<StudentDepartment>(lineData[1])
+                    Department = Enum.Parse<StudentDepartment>(lineData[1]),
+                    FirstName = lineData[2],
+                    SurnName = lineData[3],
+                    MiddleName = lineData[4]
                 }
             );
+    }
+    
+    private static Dictionary<string,SubmissionDataModel> ConvertToSubmissionsDataModel(this List<string> data)
+    {
+        return data.Select(line => line.Split(",")).ToDictionary(
+            lineData => lineData[0],
+            lineData => new SubmissionDataModel
+            {
+                StudentId = lineData[0],
+                Department = Enum.Parse<StudentDepartment>(lineData[1]),
+                SubmitedAssigmentCodeFiles = lineData[2].Split("|").ToDictionary(
+                    codeFilesData => int.Parse(codeFilesData.Split("^")[0]),
+                    codeFilesData => new AssignmentSubmisssion
+                    {
+                        AssignmentNumber = int.Parse(codeFilesData.Split("^")[0]),
+                        SubmissionCount = int.Parse(codeFilesData.Split("^")[1]),
+                        CanBeResubmitted = bool.Parse(codeFilesData.Split("^")[2])
+                    }),
+                SubmitedAssigmentVideoFiles = lineData[3].Split("|").ToDictionary(
+                    videoFilesData => int.Parse(videoFilesData.Split("^")[0]),
+                    videoFilesData => new AssignmentSubmisssion
+                    {
+                        AssignmentNumber = int.Parse(videoFilesData.Split("^")[0]),
+                        SubmissionCount = int.Parse(videoFilesData.Split("^")[1]),
+                        CanBeResubmitted = bool.Parse(videoFilesData.Split("^")[2])
+                    }),
+
+            }
+        );
     }
     
     private static void TryDeleteFile(string filePath)
@@ -91,7 +135,7 @@ public static class Services
     
     private static async Task<bool> UpdateGeneralDataToFile(this GeneralDataModel newData)
     {
-        var data = $"{newData.StudentId},{newData.Department}";
+        var data = $"{newData.StudentId},{newData.Department},{newData.FirstName},{newData.SurnName},{newData.MiddleName??""}";
 
         try
         {
@@ -107,24 +151,28 @@ public static class Services
          return false;
         }
     }
-
-    public static async Task<IResult> AddOrReturnGeneralStudentSubmissionData(GeneralDataModel generalStudentData)
+    
+    public static async Task<IResult> CheckForGeneralStudentSubmissionData(string studentId)
     {
-
-        if (!GeneralSubmissionData.ContainsKey(generalStudentData.StudentId))
+        var data = GeneralSubmissionData.TryGetValue(studentId, out var generalData);
+        if (!data)
         {
+            return Results.Json(new{Status=GeneralSubmissionDataStatus.NotPresent, Message="General Student Data Not Found"});
+        }
+        
+        return Results.Json(new{Data=generalData, Status=GeneralSubmissionDataStatus.Present, Message="General Student Data Found"});
+    }
+
+    public static async Task<IResult> AddOrUpdateGeneralStudentSubmissionData(GeneralDataModel generalStudentData)
+    {
            var status= await generalStudentData.UpdateGeneralDataToFile();
            if (!status)
            {
-               return Results.Json(new{Data=generalStudentData, Status=GeneralSubmissionDataStatus.Failed});
+               return Results.Json(new{Status=GeneralSubmissionDataStatus.Failed, Message="An Error Occured while Adding General Student Data"});
            }
            GeneralSubmissionData.Add(generalStudentData.StudentId, generalStudentData);
            _dataActionsLogger.LogInformation($"student data with id {generalStudentData.StudentId} Successfully Added");
-              return Results.Json(new{Data=generalStudentData, Status=GeneralSubmissionDataStatus.Added});
-        }
-        
-        Console.WriteLine($"student data with id {generalStudentData.StudentId} already exists");
-        return Results.Json(new{Data=generalStudentData, Status=GeneralSubmissionDataStatus.Present});
+           return Results.Json(new{Data=generalStudentData, Status=GeneralSubmissionDataStatus.Added, Message="General Student Data Successfully Added"});
         
     }
 }

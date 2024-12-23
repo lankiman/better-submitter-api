@@ -52,3 +52,6 @@ launchSettings.json
 
 # Rider's solution-wide analysis caches
 .idea/.solution-wide
+
+#project specific file
+Data/

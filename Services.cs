@@ -1,3 +1,7 @@
+
+
+using System.Text.RegularExpressions;
+
 namespace better_submitter_api;
 
 public static class Services
@@ -13,7 +17,9 @@ public static class Services
 
     private static  string _cDataPath; 
     
-    private static  string _pythongDataPath; 
+    private static  string _pythongDataPath;
+
+    private static string _mainDataFolder;
     
     private static Dictionary<string, GeneralDataModel> GeneralSubmissionData { get; set; } = new();
     
@@ -21,23 +27,35 @@ public static class Services
     
     private static Dictionary<string, SubmissionDataModel> PythonSubmissionData { get; set; } = new();
     
-    
-    static Services(){}
-    
+   //initilize service fields like a constructor
     public static void Initialize(ILoggerFactory loggerFactory, string contentRootPath)
     {
         _contentRootPath=contentRootPath;
         _dataActionsLogger = loggerFactory.CreateLogger("DataActions");
         _fileActionsLogger = loggerFactory.CreateLogger("FileActions");
         var mainDataFolder = Path.Combine(_contentRootPath, "Data");
-        Directory.CreateDirectory(mainDataFolder);
-        _generalDataPath = Path.Combine(mainDataFolder, "GeneralData.txt");
-        _cDataPath = Path.Combine(mainDataFolder, "CData.txt");
-        _pythongDataPath = Path.Combine(mainDataFolder, "PythonData.txt");
+        InitializeDirectories(mainDataFolder);
         PopulateDataDicionaries();
     }
-    
-    
+
+    //private helper methods
+    private static void InitializeDirectories(string mainDataFolder)
+    {
+        Directory.CreateDirectory(mainDataFolder);
+        _mainDataFolder = mainDataFolder;
+        Directory.CreateDirectory(Path.Combine(_mainDataFolder, "PythonSubmissions"));
+        Directory.CreateDirectory(Path.Combine(_mainDataFolder, "CSubmissions"));
+        _generalDataPath = Path.Combine(_mainDataFolder, "General_Data.csv");
+        _cDataPath = Path.Combine(_mainDataFolder, "C_Data.cvs");
+        _pythongDataPath = Path.Combine(_mainDataFolder, "Python_Data.csv");
+    }
+
+    private static string CreateOrReturnDepartmentDirectory(StudentDepartment department,  SubmissionType submissionType)
+    {
+        var departmentFolder =
+            Directory.CreateDirectory(Path.Combine(_mainDataFolder, submissionType.ToString(), department.ToString()));
+        return departmentFolder.FullName;
+    }
     private static bool IsFileExist (string filePath)
     {
         return File.Exists(filePath);
@@ -64,7 +82,26 @@ public static class Services
         }
        
     }
+    private static void TryDeleteFile(string filePath)
+    {
+        try
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+        }
+        catch (IOException exception)
+        {
+            Console.WriteLine(exception.Message);
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            Console.WriteLine(exception.Message);
+        }
+    }
     
+    //private helper methods for  data actions
     private static Dictionary<string, GeneralDataModel> ConvertToGeneralDataModel(this List<string> data)
     {
       
@@ -112,32 +149,49 @@ public static class Services
         );
     }
     
-    private static void TryDeleteFile(string filePath)
+    private static Dictionary<string,string> ValidateGeneralDataModel(GeneralDataModel model)
     {
-        try
+        var errors = new Dictionary<string, string>();
+
+        bool IsValidStudentId(string studentId)
         {
-            if (File.Exists(filePath))
+            string pattern = @"^UG/\d{2}/\d{4}$";
+            Regex regex = new(pattern);
+            return regex.IsMatch(studentId.ToUpper());
+        }
+        void AddErrorIfEmpty(string value, string fieldName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
             {
-                File.Delete(filePath);
+                errors.Add(fieldName, $"{fieldName} is required.");
             }
         }
-        catch (IOException exception)
+
+        AddErrorIfEmpty(model.StudentId, nameof(model.StudentId));
+        if(!IsValidStudentId(model.StudentId))
         {
-            Console.WriteLine(exception.Message);
+            errors.Add(nameof(model.StudentId), "Invalid Student Id");
         }
-        catch (UnauthorizedAccessException exception)
+        AddErrorIfEmpty(model.SurnName, nameof(model.SurnName));
+        AddErrorIfEmpty(model.FirstName, nameof(model.FirstName));
+        
+        
+        if (!Enum.IsDefined(typeof(StudentDepartment), model.Department))
         {
-            Console.WriteLine(exception.Message);
+            errors.Add(nameof(model.Department), "Invalid Department");
         }
+
+        return errors;
     }
+   
     
-    private static async Task<bool> AddGeneralDataToFile(this GeneralDataModel newData)
+    private static async Task<bool> AddGeneralDataToFile(this  GeneralDataModel newData)
     {
-        var data = $"{newData.StudentId},{newData.Department},{newData.FirstName},{newData.SurnName},{newData.MiddleName??""}";
+        var data = $"{newData.StudentId},{newData.Department},{newData.SurnName},{newData.FirstName},{newData.MiddleName??" "}";
 
         try
         {
-            using var writer = new StreamWriter(_generalDataPath);
+            using var writer = new StreamWriter(_generalDataPath, append:true);
             await writer.WriteLineAsync(data);
             _dataActionsLogger.LogInformation($"student data with id {newData.StudentId} updated to file");
             return true;
@@ -150,27 +204,102 @@ public static class Services
         }
     }
     
+    //endpoint actions for general data
     public static async Task<IResult> CheckForGeneralStudentSubmissionData(string studentId)
     {
         var data = GeneralSubmissionData.TryGetValue(studentId, out var generalData);
         if (!data)
         {
-            return Results.Json(new{Status=GeneralSubmissionDataStatus.NotPresent, Message="General Student Data Not Found"});
+            _dataActionsLogger.LogInformation($"student data with id {studentId} Not Found");
+            return Results.Json(new{Status=GeneralSubmissionDataStatus.NotPresent.ToString(), Message="General Student Data Not Found"});
         }
         
-        return Results.Json(new{Data=generalData, Status=GeneralSubmissionDataStatus.Present, Message="General Student Data Found"});
+        _dataActionsLogger.LogInformation($"student data with id {studentId} Found");
+        return Results.Json(new{Data=new GeneralDataModelResponse
+        {
+            StudentId = generalData.StudentId,
+            Department = generalData.Department.ToString(),
+            FirstName = generalData.FirstName,
+            SurnName = generalData.SurnName,
+            MiddleName = generalData.MiddleName
+        }, Status=GeneralSubmissionDataStatus.Present.ToString(), Message="General Student Data Found"});
     }
+    
 
     public static async Task<IResult> AddGeneralStudentSubmissionData(GeneralDataModel generalStudentData)
     {
-           var status= await generalStudentData.AddGeneralDataToFile();
+        var validationErrors = ValidateGeneralDataModel(generalStudentData);
+        if (validationErrors.Any())
+        {
+            return Results.Json(new { Status = GeneralSubmissionDataStatus.Failed.ToString(), Errors = validationErrors, Message="Validation Errors" });
+        }
+        var data = GeneralSubmissionData.TryGetValue(generalStudentData.StudentId, out var generalData);
+        if (data)
+        {
+            _dataActionsLogger.LogInformation($"student data with id {generalStudentData.StudentId} already Exist");
+            
+            return Results.Json(new{Data=new GeneralDataModelResponse
+            {
+                StudentId = generalData.StudentId,
+                Department = generalData.Department.ToString(),
+                FirstName = generalData.FirstName,
+                SurnName = generalData.SurnName,
+                MiddleName = generalData.MiddleName
+            }, Status=GeneralSubmissionDataStatus.Present.ToString(), Message="General Student Data Already Exists"});
+        }
+        var status= await generalStudentData.AddGeneralDataToFile();
            if (!status)
            {
                return Results.Json(new{Status=GeneralSubmissionDataStatus.Failed, Message="An Error Occured while Adding General Student Data"});
            }
            GeneralSubmissionData.Add(generalStudentData.StudentId, generalStudentData);
            _dataActionsLogger.LogInformation($"student data with id {generalStudentData.StudentId} Successfully Added");
-           return Results.Json(new{Data=generalStudentData, Status=GeneralSubmissionDataStatus.Added, Message="General Student Data Successfully Added"});
+           return Results.Json(new{Status=GeneralSubmissionDataStatus.Added.ToString(), Message="General Student Data Successfully Added"});
+    }
+    
+    //private helper method for file actions
+
+    private static bool ValidateFile(IFormFile file)
+    {
+        return file == null || file.Length == 0;
+    }
+    
+    private static bool ValidateFileSize(IFormFile file, long fileSize)
+    {
+        return file.Length <= fileSize;
+    }
+    
+    private static bool ValidateFileTypeAndExtension(IFormFile file, FileType fileType)
+    {
+       
+        string extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+        string contentType = file.ContentType.ToLowerInvariant();
+    
+        return fileType switch
+        {
+            FileType.c => extension == ".c" && 
+                          (contentType == "text/x-c" || 
+                           contentType == "text/plain" ||
+                           contentType == "application/octet-stream"),
+                      
+            FileType.python => extension == ".py" && 
+                               (contentType == "text/x-python" || 
+                                contentType == "text/plain" ||
+                                contentType == "application/octet-stream"),
+                           
+            FileType.mp4 => extension == ".mp4" && 
+                            (contentType == "video/mp4" || 
+                             contentType == "application/mp4" ||
+                             contentType == "application/octet-stream"),
+                         
+            _ => false
+        };
+    }
+  
+
+    //public methods for python file submssions
+    public static async Task<IResult> SavePythonCodeFileToStorage(IFormFile file)
+    {
         
     }
 }

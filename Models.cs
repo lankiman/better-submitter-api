@@ -29,12 +29,33 @@ public class AssignmentSubmisssion
     public int SubmissionCount { get; set; }
     public bool CanBeResubmitted { get; set; }
 }
+
+public class GeneralDataModelResponse
+{
+    public string StudentId { get; set; }
+    public string Department { get; set; }
+    public string FirstName { get; set; }
+    public string SurnName { get; set; }
+    public string? MiddleName { get; set; }
+}
 public enum AssigmentType
 {
     C,
     Python
 }
 
+public enum FileType
+{
+    c,
+    python,
+    mp4,
+}
+
+public enum SubmissionType
+{
+    CSubmissions,
+    PythonSubmissions
+}
 public enum StudentDepartment
 {
     Agricultural,

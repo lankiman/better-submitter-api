@@ -2,5 +2,20 @@
 
 GET {{better_submitter_api_HostAddress}}/hello
 Accept: application/json
+###
+GET {{better_submitter_api_HostAddress}}/student/1
+Accept: application/json
+###
 
+POST {{better_submitter_api_HostAddress}}/student
+Content-Type: application/json
+Accept: application/json
+
+{
+  "StudentId": "UG/19/0730",
+  "Department": 3,
+  "SurnName": "Gboun",
+  "FirstName": "Marvellous",
+  "MiddleName": "Emmanuel"
+}
 ###

@@ -38,7 +38,12 @@ public enum StudentDepartment
     Electrical,
     Mechanical,
     Marine,
-    Petroleum,
-    
-    
+    Petroleum
+}
+
+public enum GeneralSubmissionDataStatus
+{
+    Present,
+    Added,
+    Failed
 }

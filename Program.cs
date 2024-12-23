@@ -10,7 +10,7 @@ builder.Logging.AddDebug();
 var app = builder.Build();
 var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
 
-Services.Initialize(loggerFactory);
+Services.Initialize(loggerFactory, app.Environment.ContentRootPath);
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -18,6 +18,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.Register();
 
 app.Run();
 

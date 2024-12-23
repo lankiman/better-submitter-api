@@ -3,19 +3,17 @@ namespace better_submitter_api;
 public static class Services
 {
     
-    private static IWebHostEnvironment _hostingEnvironment;
-
     private static ILogger _dataActionsLogger;
 
     private static ILogger _fileActionsLogger;
     
-    private static readonly string _contentRootPath;
+    private static string _contentRootPath;
     
-    private static readonly string _generalDataPath = Path.Combine(_contentRootPath, "Data", "general_submission_data.csv");
+    private static  string _generalDataPath;
+
+    private static  string _cDataPath; 
     
-    private static readonly string _cDataPath = Path.Combine(_contentRootPath, "Data", "c_submission_data.csv");
-    
-    private static readonly string _pythongDataPath = Path.Combine(_contentRootPath, "Data", "python_submission_data.csv");
+    private static  string _pythongDataPath; 
     
     private static Dictionary<string, GeneralDataModel> GeneralSubmissionData { get; set; } = new();
     
@@ -24,20 +22,20 @@ public static class Services
     private static Dictionary<string, SubmissionDataModel> PythonSubmissionData { get; set; } = new();
     
     
-    static Services()
-    {
-        _contentRootPath = _hostingEnvironment.ContentRootPath;
-        PopulateDataDicionaries();
-        
-    }
+    static Services(){}
     
-    public static void Initialize(ILoggerFactory loggerFactory)
+    public static void Initialize(ILoggerFactory loggerFactory, string contentRootPath)
     {
+        _contentRootPath=contentRootPath;
         _dataActionsLogger = loggerFactory.CreateLogger("DataActions");
         _fileActionsLogger = loggerFactory.CreateLogger("FileActions");
-        
+        var mainDataFolder = Path.Combine(_contentRootPath, "Data");
+        Directory.CreateDirectory(mainDataFolder);
+        _generalDataPath = Path.Combine(mainDataFolder, "GeneralData.txt");
+        _cDataPath = Path.Combine(mainDataFolder, "CData.txt");
+        _pythongDataPath = Path.Combine(mainDataFolder, "PythonData.txt");
+        PopulateDataDicionaries();
     }
-
     
     
     private static bool IsFileExist (string filePath)
@@ -133,7 +131,7 @@ public static class Services
         }
     }
     
-    private static async Task<bool> UpdateGeneralDataToFile(this GeneralDataModel newData)
+    private static async Task<bool> AddGeneralDataToFile(this GeneralDataModel newData)
     {
         var data = $"{newData.StudentId},{newData.Department},{newData.FirstName},{newData.SurnName},{newData.MiddleName??""}";
 
@@ -163,9 +161,9 @@ public static class Services
         return Results.Json(new{Data=generalData, Status=GeneralSubmissionDataStatus.Present, Message="General Student Data Found"});
     }
 
-    public static async Task<IResult> AddOrUpdateGeneralStudentSubmissionData(GeneralDataModel generalStudentData)
+    public static async Task<IResult> AddGeneralStudentSubmissionData(GeneralDataModel generalStudentData)
     {
-           var status= await generalStudentData.UpdateGeneralDataToFile();
+           var status= await generalStudentData.AddGeneralDataToFile();
            if (!status)
            {
                return Results.Json(new{Status=GeneralSubmissionDataStatus.Failed, Message="An Error Occured while Adding General Student Data"});

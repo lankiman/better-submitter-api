@@ -20,9 +20,9 @@ public class SubmissionDataModel
     
     public StudentDepartment Department { get; set; }
     
-    public Dictionary<int,AssignmentSubmisssion> SubmitedAssigmentCodeFiles { get; set; }
+    public Dictionary<int,AssignmentSubmisssion> SubmittedAssignmentCodeFiles { get; set; }
     
-    public Dictionary<int,AssignmentSubmisssion> SubmitedAssigmentVideoFiles { get; set; }
+    public Dictionary<int,AssignmentSubmisssion> SubmittedAssignmentVideoFiles { get; set; }
 }
 
 public class AssignmentSubmisssion
@@ -48,7 +48,12 @@ public class FileSubmissionRequestModel
   public GeneralDataModel StudentData { get; set; }
   public int AssignmentNumber { get; set; }
   
-  public SubmissionType SubmissionType { get; set; }
+  public SubmissionFileType SubmissionFileType { get; set; }
+  
+  public SubmissionFolderType SubmissionFolderType { get; set; }
+  
+  public FileType FileType { get; set; }
+  
   public IFormFile File { get; set; }  
 }
 public enum AssigmentType
@@ -68,12 +73,21 @@ public enum FileType
     c,
     py,
     mp4,
+    java,
 }
 
-public enum SubmissionType
+public enum SubmissionFileType
+{
+    Code = 2,
+    Video = 3
+}
+
+
+public enum SubmissionFolderType
 {
     CSubmissions,
-    PythonSubmissions
+    PythonSubmissions,
+    JavaSubmissions
 }
 public enum StudentDepartment
 {

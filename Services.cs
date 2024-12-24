@@ -1,5 +1,6 @@
 
 
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Exception = System.Exception;
 
@@ -55,10 +56,10 @@ public static class Services
         _pythongDataPath = Path.Combine(_mainDataFolder, "Python_Data.csv");
     }
 
-    private static string GetOrCreateDepartmentDirectory(StudentDepartment department,  SubmissionType submissionType)
+    private static string GetOrCreateDepartmentDirectory(SubmissionFolderType submissionFolderType, StudentDepartment department)
     {
         var departmentFolder =
-            Directory.CreateDirectory(Path.Combine(_mainDataFolder, submissionType.ToString(), department.ToString()));
+            Directory.CreateDirectory(Path.Combine(_mainDataFolder, submissionFolderType.ToString(), department.ToString()));
         return departmentFolder.FullName;
     }
 
@@ -141,7 +142,7 @@ public static class Services
             {
                 StudentId = lineData[0],
                 Department = Enum.Parse<StudentDepartment>(lineData[1]),
-                SubmitedAssigmentCodeFiles = lineData[2].Split("|").ToDictionary(
+                SubmittedAssignmentCodeFiles = lineData[2].Split("|").ToDictionary(
                     codeFilesData => int.Parse(codeFilesData.Split("^")[0]),
                     codeFilesData => new AssignmentSubmisssion
                     {
@@ -149,7 +150,7 @@ public static class Services
                         SubmissionCount = int.Parse(codeFilesData.Split("^")[1]),
                         CanBeResubmitted = bool.Parse(codeFilesData.Split("^")[2])
                     }),
-                SubmitedAssigmentVideoFiles = lineData[3].Split("|").ToDictionary(
+                SubmittedAssignmentVideoFiles = lineData[3].Split("|").ToDictionary(
                     videoFilesData => int.Parse(videoFilesData.Split("^")[0]),
                     videoFilesData => new AssignmentSubmisssion
                     {
@@ -347,7 +348,7 @@ public static class Services
         {
           id=ConvertMatricNumberToNamingFormat(data.StudentId);
         }
-        return $"{id}_{data.SurnName}_{data.FirstName}{(string.IsNullOrWhiteSpace(data.MiddleName) ? "" : $"_{data.MiddleName}")}_{assignmentNumber}.{fileType}";
+        return $"{data.SurnName}_{data.FirstName}{(string.IsNullOrWhiteSpace(data.MiddleName) ? "" : $"_{data.MiddleName}")}_{id}_{assignmentNumber}.{fileType}";
     }
     
     private static string GetStudentFolderPath(GeneralDataModel data)
@@ -361,26 +362,25 @@ public static class Services
         return $"{id}_{data.SurnName}_{data.FirstName}{(string.IsNullOrWhiteSpace(data.MiddleName) ? "" : $"_{data.MiddleName}")}";
     }
     
-    private static (string, string) ComputeCodeFilePath(FileSubmissionRequestModel submissionRequestData)
+    private static (string, string) ComputeSubmissionFilePath(FileSubmissionRequestModel submissionRequestData)
     {
-        var folderPath=GetOrCreateDepartmentDirectory(submissionRequestData.StudentData.Department, submissionRequestData.SubmissionType);
+        var folderPath=GetOrCreateDepartmentDirectory(submissionRequestData.SubmissionFolderType, submissionRequestData.StudentData.Department);
         
         var studentFolderPath=GetStudentFolderPath(submissionRequestData.StudentData);
         
-        var fileName = GetFileName(submissionRequestData.StudentData, submissionRequestData.AssignmentNumber, FileType.py);
+        var fileName = GetFileName(submissionRequestData.StudentData, submissionRequestData.AssignmentNumber, submissionRequestData.FileType);
         
         var filePath = Path.Combine(folderPath, studentFolderPath, fileName);
         return (filePath, fileName);
     }
     
-    private static async Task<bool> SaveCodeFileToStorage(this FileSubmissionRequestModel submissionRequestData)
+    private static async Task<bool> SaveFileToStorage(this FileSubmissionRequestModel submissionRequestData)
     {
-
-        var (filePath, fileName) = ComputeCodeFilePath(submissionRequestData);
+        var (filePath, fileName) = ComputeSubmissionFilePath(submissionRequestData);
 
         try
         {
-            using var stream = new FileStream(filePath, FileMode.Create);
+            await using var stream = new FileStream(filePath, FileMode.Create);
             await submissionRequestData.File.CopyToAsync(stream);
             _fileActionsLogger.LogInformation($"File {fileName} saved to storage");
             return true;
@@ -394,15 +394,38 @@ public static class Services
         }
         
     }
-    
-    private static async Task<bool> AddCodeSubmissionDataToFile(this SubmissionDataModel newData, string dataFilePath)
-    {
-        var submissionData = newData.SubmitedAssigmentCodeFiles.FirstOrDefault().Value;
-        var data = $"{newData.StudentId},{newData.Department},{submissionData.AssignmentNumber}^{submissionData.SubmissionCount}^{submissionData.CanBeResubmitted},{""}";
 
+    private static AssignmentSubmisssion ExtractAssignmentSubmissionData(this SubmissionDataModel newData, SubmissionFileType submissionFileType)
+    {
+        return submissionFileType switch
+        {
+            SubmissionFileType.Code=> newData.SubmittedAssignmentCodeFiles.FirstOrDefault().Value,
+            SubmissionFileType.Video => newData.SubmittedAssignmentVideoFiles.FirstOrDefault().Value,
+            _ => throw new ArgumentOutOfRangeException(nameof(submissionFileType), "Invalid submission type")
+        }; 
+    }
+    
+    private static async Task<bool> AddAssignmentSubmissionDataToFile(this SubmissionDataModel newData, string dataFilePath, SubmissionFileType submissionFileType)
+    {
+
+        var submissionData = newData.ExtractAssignmentSubmissionData(submissionFileType);
+        var submissionDataPart = submissionFileType switch
+        {
+            SubmissionFileType.Code => $"{submissionData.AssignmentNumber}^{submissionData.SubmissionCount}^{submissionData.CanBeResubmitted}",
+            SubmissionFileType.Video => $"{submissionData.AssignmentNumber}^{submissionData.SubmissionCount}^{submissionData.CanBeResubmitted}", 
+            _ => throw new ArgumentOutOfRangeException(nameof(submissionFileType), "Invalid submission type")
+        };
+        
+        var data = submissionFileType switch
+        {
+            SubmissionFileType.Code => $"{newData.StudentId},{newData.Department},{submissionDataPart},{""}",
+            SubmissionFileType.Video => $"{newData.StudentId},{newData.Department},{""},{submissionDataPart}", 
+            _ => throw new ArgumentOutOfRangeException(nameof(submissionFileType), "Invalid submission type")
+        };
+        
         try
         {
-            using var writer = new StreamWriter(dataFilePath, append:true);
+            await using var writer = new StreamWriter(dataFilePath, append:true);
             await writer.WriteLineAsync(data);
             _dataActionsLogger.LogInformation($"python code file for {newData.StudentId} assigment number {submissionData.AssignmentNumber} added to file");
             return true;
@@ -417,16 +440,33 @@ public static class Services
 
     private static Dictionary<int, AssignmentSubmisssion> ConvertToAssignmentSubmissionDataDictionary(this string data)
     {
-        
+        return data.Split("|").ToDictionary(submissionData => int.Parse(submissionData.Split("^")[0]),
+            submissionData => new AssignmentSubmisssion
+            {
+                AssignmentNumber = int.Parse(submissionData.Split("^")[0]),
+                SubmissionCount = int.Parse(submissionData.Split("^")[1]),
+                CanBeResubmitted = bool.Parse(submissionData.Split("^")[2])
+            });
     }
 
-    private static string UpdateAssignmentSubmissionDataString(this string oldData, string dataToUpdate, string newData)
+    private static string ConvertToAssignmentSubmissionDataString(this Dictionary<int, AssignmentSubmisssion> data)
     {
-        
+        return string.Join("|",
+            data.Select(submissionData =>
+                $"{submissionData.Value.AssignmentNumber}^{submissionData.Value.SubmissionCount}^{submissionData.Value.CanBeResubmitted}"));
     }
-    private static async Task<bool> UpdateCodeSubmissionDataToFile(this SubmissionDataModel newData, string filePath)
+
+    private static string UpdateAssignmentSubmissionDataString(this string oldData, int dataToUpdate, AssignmentSubmisssion newData)
     {
-        var submissionData = newData.SubmitedAssigmentCodeFiles.FirstOrDefault().Value;
+        var oldDataDictionary = ConvertToAssignmentSubmissionDataDictionary(oldData);
+
+        oldDataDictionary[dataToUpdate] = newData;
+
+        return oldDataDictionary.ConvertToAssignmentSubmissionDataString();
+    }
+    private static async Task<bool> UpdateAssignmentSubmissionDataToFile(this SubmissionDataModel newData, string filePath, SubmissionFileType type)
+    {
+        var submissionData = newData.ExtractAssignmentSubmissionData(type);
         var tempFilePath = GetRandomTempDataFilePath();
         try
         {
@@ -439,11 +479,15 @@ public static class Services
             {
                 string[] parts = line.Split(",");
 
+                var index = (int)type;
+
                 if (parts[0] == newData.StudentId)
                 {
-                    string newValue = "";
-                    parts[2] = newValue;
+                    string newValue = parts[index].UpdateAssignmentSubmissionDataString(submissionData.AssignmentNumber, submissionData);
+                    parts[index] = newValue;
                     await writer.WriteLineAsync(string.Join(",", parts));
+                    _dataActionsLogger.LogInformation(
+                        $"successfully updated code file submission data for {newData.StudentId}  assignment number {submissionData.AssignmentNumber}");
                 }
 
                 await writer.WriteLineAsync(line);
@@ -454,7 +498,7 @@ public static class Services
         catch (Exception exception)
         {
             _dataActionsLogger.LogInformation(
-                $"error occured while adding updating code file for {newData.StudentId}  assignment number {submissionData.AssignmentNumber}");
+                $"error occured while adding updating code file submission data for {newData.StudentId}  assignment number {submissionData.AssignmentNumber}");
             _dataActionsLogger.LogError(exception.Message);
             return false;
         }
@@ -462,35 +506,21 @@ public static class Services
         {
             TryDeleteFile(tempFilePath);
         }
+
+        return true;
     }
 
-    //private methods for python file submssions
-    
-    //public endpoint actions for python file submissions
-    
-    public static async Task<IResult> SubmitPythonCodeFile(FileSubmissionRequestModel submissionRequestData)
+    private static SubmissionDataModel GenerateAddAssignmentSubmissionRequestDataModel(
+        this FileSubmissionRequestModel submissionRequestData)
     {
-        var validationErrors = ValidateFile(submissionRequestData.File, FileType.py, MaxCodeFileSize);
-        if (validationErrors.Any())
-        {
-            return Results.Json(new { Status = FileSubmissionStatus.Failed.ToString(), Errors = validationErrors, Message="Validation Errors" });
-        }
-        var result= await submissionRequestData.SaveCodeFileToStorage();
 
-        if (!result)
+        if (submissionRequestData.SubmissionFileType == SubmissionFileType.Code)
         {
-            return Results.Json(new{Status=FileSubmissionStatus.Failed, Message="An Error Occured while Uploading File"}); 
-        }
-        var data = PythonSubmissionData.TryGetValue(submissionRequestData.StudentData.StudentId, out var generalData);
-        
-        if (!data)
-        {
-            _fileActionsLogger.LogInformation($"submiting python code file for student with id {submissionRequestData.StudentData.StudentId} assignment number {submissionRequestData.AssignmentNumber}");
-            var model = new SubmissionDataModel
+            return new SubmissionDataModel
             {
                 StudentId = submissionRequestData.StudentData.StudentId,
                 Department = submissionRequestData.StudentData.Department,
-                SubmitedAssigmentCodeFiles = new Dictionary<int, AssignmentSubmisssion>
+                SubmittedAssignmentCodeFiles = new Dictionary<int, AssignmentSubmisssion>
                 {
                     {
                         submissionRequestData.AssignmentNumber, new AssignmentSubmisssion
@@ -501,12 +531,55 @@ public static class Services
                         }
                     }
                 },
-                SubmitedAssigmentVideoFiles = new()
+                SubmittedAssignmentVideoFiles = new()
             };
-            var status = await model.AddCodeSubmissionDataToFile(_pythongDataPath);
+        }
+        
+        return new SubmissionDataModel
+        {
+            StudentId = submissionRequestData.StudentData.StudentId,
+            Department = submissionRequestData.StudentData.Department,
+            SubmittedAssignmentCodeFiles =  new(),
+            SubmittedAssignmentVideoFiles = new Dictionary<int, AssignmentSubmisssion>
+            {
+                {
+                    submissionRequestData.AssignmentNumber, new AssignmentSubmisssion
+                    {
+                        AssignmentNumber = submissionRequestData.AssignmentNumber,
+                        SubmissionCount = 1,
+                        CanBeResubmitted = true
+                    }
+                }
+            },
+        };
+        
+    }
+    
+    //public endpoint actions for python file submissions
+    
+    public static async Task<IResult> SubmitPythonAssignmentFile(FileSubmissionRequestModel submissionRequestData)
+    {
+        var validationErrors = ValidateFile(submissionRequestData.File, submissionRequestData.FileType, MaxCodeFileSize);
+        if (validationErrors.Any())
+        {
+            return Results.Json(new { Status = FileSubmissionStatus.Failed.ToString(), Errors = validationErrors, Message="Validation Errors" });
+        }
+        var result= await submissionRequestData.SaveFileToStorage();
+
+        if (!result)
+        {
+            return Results.Json(new{Status=FileSubmissionStatus.Failed, Message="An Error Occured while Uploading File"}); 
+        }
+        var data = PythonSubmissionData.TryGetValue(submissionRequestData.StudentData.StudentId, out var currentGeneralData);
+        
+        if (!data)
+        {
+            _fileActionsLogger.LogInformation($"submiting python {submissionRequestData.SubmissionFileType.ToString()} file for student with id {submissionRequestData.StudentData.StudentId} assignment number {submissionRequestData.AssignmentNumber}");
+            var model = submissionRequestData.GenerateAddAssignmentSubmissionRequestDataModel();
+            var status = await model.AddAssignmentSubmissionDataToFile(_pythongDataPath, submissionRequestData.SubmissionFileType);
             if (!status)
             {
-                var (filePath,_) = ComputeCodeFilePath(submissionRequestData);
+                var (filePath,_) = ComputeSubmissionFilePath(submissionRequestData);
                 TryDeleteFile(filePath);
                 return Results.Json(new{Status=FileSubmissionStatus.Failed, Message="An Error Occured while Uploading File"});
             }
@@ -514,5 +587,27 @@ public static class Services
             return Results.Json(new{Status=FileSubmissionStatus.Successfull, Message="File Sucessfully Uploaded"}); 
         }
 
+        var currentSubmissionCount = currentGeneralData
+            .SubmittedAssignmentCodeFiles[submissionRequestData.AssignmentNumber].SubmissionCount;
+        var updatedGeneralData = new SubmissionDataModel
+        {
+            StudentId = currentGeneralData.StudentId,
+            Department = currentGeneralData.Department,
+            SubmittedAssignmentCodeFiles = new Dictionary<int, AssignmentSubmisssion>
+            {
+                { submissionRequestData.AssignmentNumber, new AssignmentSubmisssion
+                    {
+                        AssignmentNumber = submissionRequestData.AssignmentNumber,
+                        SubmissionCount = currentSubmissionCount + 1,
+                        CanBeResubmitted = currentSubmissionCount < 2
+                    }
+                }
+            }
+
+        };
+     
+        var updateResult= await updatedGeneralData.UpdateCodeSubmissionDataToFile()
     }
+    
+    //TODO: Add Java Submisson Functionality
 }

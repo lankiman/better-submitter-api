@@ -198,7 +198,6 @@ public static class Services
         return errors;
     }
    
-    
     private static async Task<bool> AddGeneralDataToFile(this  GeneralDataModel newData)
     {
         var data = $"{newData.StudentId},{newData.StudentIdType},{newData.Department},{newData.SurnName},{newData.FirstName},{newData.MiddleName??" "}";
@@ -554,8 +553,87 @@ public static class Services
         };
         
     }
+
+    private static SubmissionDataModel GenerateUpdateAssignmentSubmissionRequestDataModel(
+        this SubmissionDataModel currentGeneralData, int assignmentNumber, SubmissionFileType type)
+    {
+
+        if (type == SubmissionFileType.Code)
+        {
+            var currentCodeSubmissionCount = currentGeneralData
+                .SubmittedAssignmentCodeFiles[assignmentNumber].SubmissionCount;
+            return new SubmissionDataModel
+            {
+                StudentId = currentGeneralData.StudentId,
+                Department = currentGeneralData.Department,
+                SubmittedAssignmentCodeFiles = new Dictionary<int, AssignmentSubmisssion>
+                {
+                    { assignmentNumber, new AssignmentSubmisssion
+                        {
+                            AssignmentNumber = assignmentNumber,
+                            SubmissionCount = currentCodeSubmissionCount + 1,
+                            CanBeResubmitted = currentCodeSubmissionCount < 2
+                        }
+                    }
+                }
+
+            }; 
+        }
+        var currentVideoSubmissionCount = currentGeneralData
+            .SubmittedAssignmentVideoFiles[assignmentNumber].SubmissionCount;
+        return  new SubmissionDataModel
+        {
+            StudentId = currentGeneralData.StudentId,
+            Department = currentGeneralData.Department,
+            SubmittedAssignmentCodeFiles = new Dictionary<int, AssignmentSubmisssion>
+            {
+                { assignmentNumber, new AssignmentSubmisssion
+                    {
+                        AssignmentNumber = assignmentNumber,
+                        SubmissionCount = currentVideoSubmissionCount + 1,
+                        CanBeResubmitted = currentVideoSubmissionCount < 2
+                    }
+                }
+            }
+
+        };
+    }
     
-    //public endpoint actions for python file submissions
+    
+    private static void UpdateAssignmentSubmissionDataToDictionary(this FileSubmissionRequestModel submissionRequestModel, Dictionary<string, SubmissionDataModel> dictionary)
+    {
+        
+        if (submissionRequestModel.SubmissionFileType == SubmissionFileType.Code)
+        {
+            var currentSubmissionCount = dictionary[submissionRequestModel.StudentData.StudentId]
+                .SubmittedAssignmentCodeFiles[submissionRequestModel.AssignmentNumber].SubmissionCount;
+            dictionary[submissionRequestModel.StudentData.StudentId]
+                    .SubmittedAssignmentCodeFiles[submissionRequestModel.AssignmentNumber].SubmissionCount =
+                currentSubmissionCount + 1;
+            currentSubmissionCount = dictionary[submissionRequestModel.StudentData.StudentId]
+                .SubmittedAssignmentCodeFiles[submissionRequestModel.AssignmentNumber].SubmissionCount;
+            dictionary[submissionRequestModel.StudentData.StudentId]
+                    .SubmittedAssignmentCodeFiles[submissionRequestModel.AssignmentNumber].CanBeResubmitted =
+                currentSubmissionCount <2;
+        }
+        else
+        {
+            var currentSubmissionCount = dictionary[submissionRequestModel.StudentData.StudentId]
+                .SubmittedAssignmentVideoFiles[submissionRequestModel.AssignmentNumber].SubmissionCount;
+            dictionary[submissionRequestModel.StudentData.StudentId]
+                    .SubmittedAssignmentVideoFiles[submissionRequestModel.AssignmentNumber].SubmissionCount =
+                currentSubmissionCount + 1;
+            currentSubmissionCount = dictionary[submissionRequestModel.StudentData.StudentId]
+                .SubmittedAssignmentVideoFiles[submissionRequestModel.AssignmentNumber].SubmissionCount;
+            dictionary[submissionRequestModel.StudentData.StudentId]
+                    .SubmittedAssignmentVideoFiles[submissionRequestModel.AssignmentNumber].CanBeResubmitted =
+                currentSubmissionCount <2;   
+        }
+    }
+    
+    //TODO: implment validation for submision reqes data
+    
+    //public endpoint actions for  file submissions
     
     public static async Task<IResult> SubmitPythonAssignmentFile(FileSubmissionRequestModel submissionRequestData)
     {
@@ -584,30 +662,28 @@ public static class Services
                 return Results.Json(new{Status=FileSubmissionStatus.Failed, Message="An Error Occured while Uploading File"});
             }
             PythonSubmissionData.Add(submissionRequestData.StudentData.StudentId, model);
-            return Results.Json(new{Status=FileSubmissionStatus.Successfull, Message="File Sucessfully Uploaded"}); 
+            return Results.Json(new{Status=FileSubmissionStatus.Successfull, Message="File Successfully Uploaded"}); 
         }
 
-        var currentSubmissionCount = currentGeneralData
-            .SubmittedAssignmentCodeFiles[submissionRequestData.AssignmentNumber].SubmissionCount;
-        var updatedGeneralData = new SubmissionDataModel
-        {
-            StudentId = currentGeneralData.StudentId,
-            Department = currentGeneralData.Department,
-            SubmittedAssignmentCodeFiles = new Dictionary<int, AssignmentSubmisssion>
-            {
-                { submissionRequestData.AssignmentNumber, new AssignmentSubmisssion
-                    {
-                        AssignmentNumber = submissionRequestData.AssignmentNumber,
-                        SubmissionCount = currentSubmissionCount + 1,
-                        CanBeResubmitted = currentSubmissionCount < 2
-                    }
-                }
-            }
+        var updatedGeneralData =
+            currentGeneralData.GenerateUpdateAssignmentSubmissionRequestDataModel(submissionRequestData.AssignmentNumber,
+                submissionRequestData.SubmissionFileType);
 
-        };
-     
-        var updateResult= await updatedGeneralData.UpdateCodeSubmissionDataToFile()
+        var updateResultStatus =
+            await updatedGeneralData.UpdateAssignmentSubmissionDataToFile(_pythongDataPath,
+                submissionRequestData.SubmissionFileType);
+        
+        if (!updateResultStatus)
+        {
+            var (filePath,_) = ComputeSubmissionFilePath(submissionRequestData);
+            TryDeleteFile(filePath);
+            return Results.Json(new{Status=FileSubmissionStatus.Failed, Message="An Error Occured while Uploading File"});
+        }
+
+       submissionRequestData.UpdateAssignmentSubmissionDataToDictionary(PythonSubmissionData);
+       return Results.Json(new{Status=FileSubmissionStatus.Successfull, Message="File Successfully Uploaded"}); 
     }
     
     //TODO: Add Java Submisson Functionality
+    
 }

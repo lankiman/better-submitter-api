@@ -47,6 +47,8 @@ public class FileSubmissionRequestModel
 {
   public GeneralDataModel StudentData { get; set; }
   public int AssignmentNumber { get; set; }
+  
+  public SubmissionType SubmissionType { get; set; }
   public IFormFile File { get; set; }  
 }
 public enum AssigmentType

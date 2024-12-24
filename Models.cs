@@ -3,6 +3,8 @@ namespace better_submitter_api;
 public class GeneralDataModel
 {
     public string StudentId { get; set; } 
+    
+    public StudentIdType StudentIdType { get; set; }
     public StudentDepartment Department { get; set; }
     
     public string SurnName { get; set; }
@@ -33,10 +35,19 @@ public class AssignmentSubmisssion
 public class GeneralDataModelResponse
 {
     public string StudentId { get; set; }
+    
+    public string StudentIdType { get; set; }
     public string Department { get; set; }
     public string FirstName { get; set; }
     public string SurnName { get; set; }
     public string? MiddleName { get; set; }
+}
+
+public class FileSubmissionRequestModel
+{
+  public GeneralDataModel StudentData { get; set; }
+  public int AssignmentNumber { get; set; }
+  public IFormFile File { get; set; }  
 }
 public enum AssigmentType
 {
@@ -44,10 +55,16 @@ public enum AssigmentType
     Python
 }
 
+public enum StudentIdType
+{
+    MatricNumber,
+    JambRegNumber
+}
+
 public enum FileType
 {
     c,
-    python,
+    py,
     mp4,
 }
 
@@ -74,4 +91,10 @@ public enum GeneralSubmissionDataStatus
     Failed,
     NotPresent,
     Updated
+}
+
+public enum FileSubmissionStatus
+{
+    Successfull,
+    Failed
 }

@@ -21,6 +21,10 @@ public static class Services
 
     private static string _mainDataFolder;
     
+    private const long MaxVideoFileSize = 100 * 1024 * 1024; // 100 MB
+    private const long MaxCodeFileSize = 1 * 1024 * 1024; // 1 MB
+
+    
     private static Dictionary<string, GeneralDataModel> GeneralSubmissionData { get; set; } = new();
     
     private static Dictionary<string, SubmissionDataModel> CSubmissionData { get; set; } = new();
@@ -50,7 +54,7 @@ public static class Services
         _pythongDataPath = Path.Combine(_mainDataFolder, "Python_Data.csv");
     }
 
-    private static string CreateOrReturnDepartmentDirectory(StudentDepartment department,  SubmissionType submissionType)
+    private static string GetOrCreateDepartmentDirectory(StudentDepartment department,  SubmissionType submissionType)
     {
         var departmentFolder =
             Directory.CreateDirectory(Path.Combine(_mainDataFolder, submissionType.ToString(), department.ToString()));
@@ -111,11 +115,12 @@ public static class Services
                 lineData => lineData[0],
                 lineData => new GeneralDataModel
                 {
-                    StudentId = lineData[0],
-                    Department = Enum.Parse<StudentDepartment>(lineData[1]),
-                    FirstName = lineData[2],
-                    SurnName = lineData[3],
-                    MiddleName = lineData[4]
+                    StudentId = lineData[0], 
+                    StudentIdType= Enum.Parse<StudentIdType>(lineData[1]),
+                    Department = Enum.Parse<StudentDepartment>(lineData[2]),
+                    FirstName = lineData[3],
+                    SurnName = lineData[5],
+                    MiddleName = lineData[5]
                 }
             );
     }
@@ -187,7 +192,7 @@ public static class Services
     
     private static async Task<bool> AddGeneralDataToFile(this  GeneralDataModel newData)
     {
-        var data = $"{newData.StudentId},{newData.Department},{newData.SurnName},{newData.FirstName},{newData.MiddleName??" "}";
+        var data = $"{newData.StudentId},{newData.StudentIdType},{newData.Department},{newData.SurnName},{newData.FirstName},{newData.MiddleName??" "}";
 
         try
         {
@@ -218,6 +223,7 @@ public static class Services
         return Results.Json(new{Data=new GeneralDataModelResponse
         {
             StudentId = generalData.StudentId,
+            StudentIdType= generalData.StudentIdType.ToString(),
             Department = generalData.Department.ToString(),
             FirstName = generalData.FirstName,
             SurnName = generalData.SurnName,
@@ -241,6 +247,7 @@ public static class Services
             return Results.Json(new{Data=new GeneralDataModelResponse
             {
                 StudentId = generalData.StudentId,
+                StudentIdType = generalData.StudentIdType.ToString(),
                 Department = generalData.Department.ToString(),
                 FirstName = generalData.FirstName,
                 SurnName = generalData.SurnName,
@@ -282,7 +289,7 @@ public static class Services
                            contentType == "text/plain" ||
                            contentType == "application/octet-stream"),
                       
-            FileType.python => extension == ".py" && 
+            FileType.py => extension == ".py" && 
                                (contentType == "text/x-python" || 
                                 contentType == "text/plain" ||
                                 contentType == "application/octet-stream"),
@@ -295,11 +302,98 @@ public static class Services
             _ => false
         };
     }
-  
-
-    //public methods for python file submssions
-    public static async Task<IResult> SavePythonCodeFileToStorage(IFormFile file)
+    
+    private static Dictionary<string, string> ValidateFile(IFormFile file, FileType fileType, long fileSize)
     {
+        var errors = new Dictionary<string, string>();
+        if (ValidateFile(file))
+        {
+            errors.Add("File", "File is required");
+        }
+        if (!ValidateFileSize(file, fileSize))
+        {
+            errors.Add("File", $"File size is too large, maximum acceptable size is {fileSize}");
+        }
+        if (!ValidateFileTypeAndExtension(file, fileType))
+        {
+            errors.Add("File", $"Invalid File Type or Extension, must be a {fileType.ToString()} with a .{fileType.ToString()} extension");
+        }
+        return errors;
+    }
+
+    private static StudentIdType GetStudentIdType(string studendId)
+    {
+      return studendId.StartsWith("UG")? StudentIdType.MatricNumber: StudentIdType.JambRegNumber;
+    }
+    
+    private static string ConvertMatricNumberToNamingFormat(string matricNumber)
+    {
+        return matricNumber.Replace("/", "_");
+    }
+    private static string GetFileName(GeneralDataModel data, int assignmentNumber, FileType fileType)
+    {
+        var studentIdType = GetStudentIdType(data.StudentId);
+        var id = data.StudentId;
+        if(studentIdType==StudentIdType.MatricNumber)
+            {
+                id=ConvertMatricNumberToNamingFormat(data.StudentId);
+            }
+        return $"{id}_{data.SurnName}_{data.FirstName}{(string.IsNullOrWhiteSpace(data.MiddleName) ? "" : $"_{data.MiddleName}")}_{assignmentNumber}.{fileType}";
+    }
+    
+    private static string GetStudentFolderPath(GeneralDataModel data)
+    {
+        var studentIdType = GetStudentIdType(data.StudentId);
+        var id = data.StudentId;
+        if(studentIdType==StudentIdType.MatricNumber)
+        {
+            id=ConvertMatricNumberToNamingFormat(data.StudentId);
+        }
+        return $"{id}_{data.SurnName}_{data.FirstName}{(string.IsNullOrWhiteSpace(data.MiddleName) ? "" : $"_{data.MiddleName}")}";
+    }
+
+    //private methods for python file submssions
+    private static async Task<bool> SavePythonCodeFileToStorage(this FileSubmissionRequestModel submissionRequestData)
+    {
+       
+        var folderPath=GetOrCreateDepartmentDirectory(submissionRequestData.StudentData.Department, SubmissionType.PythonSubmissions);
+        
+        var studentFolderPath=GetStudentFolderPath(submissionRequestData.StudentData);
+        
+        var fileName = GetFileName(submissionRequestData.StudentData, submissionRequestData.AssignmentNumber, FileType.py);
+        
+        var filePath = Path.Combine(folderPath, studentFolderPath, fileName);
+
+        try
+        {
+            using var stream = new FileStream(filePath, FileMode.Create);
+            await submissionRequestData.File.CopyToAsync(stream);
+            _fileActionsLogger.LogInformation($"File {fileName} saved to storage");
+            return true;
+
+        }catch (Exception exception)
+        {
+            _fileActionsLogger.LogInformation($"An error occured while saving file {fileName} to storage");
+            _fileActionsLogger.LogError(exception.Message);
+            TryDeleteFile(filePath);
+            return false;
+        }
+        
+    }
+    
+    private static async Task<bool> AddPythonSubmissionDataToFile
+    
+    //public endpoint actions for python file submissions
+    
+    public static async Task<IResult> SubmitPythonCodeFile(FileSubmissionRequestModel submissionRequestData)
+    {
+        var validationErrors = ValidateFile(submissionRequestData.File, FileType.py, MaxCodeFileSize);
+        if (validationErrors.Any())
+        {
+            return Results.Json(new { Status = FileSubmissionStatus.Failed.ToString(), Errors = validationErrors, Message="Validation Errors" });
+        }
+        
+        var data = PythonSubmissionData.TryGetValue(submissionRequestData.StudentData.StudentId, out var generalData);
         
     }
 }

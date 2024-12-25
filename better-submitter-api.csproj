@@ -7,4 +7,8 @@
     <RootNamespace>better_submitter_api</RootNamespace>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Folder Include="Data\" />
+  </ItemGroup>
+
 </Project>

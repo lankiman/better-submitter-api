@@ -20,6 +20,8 @@ public static class Services
     private static  string _cDataPath; 
     
     private static  string _pythongDataPath;
+    
+    private static  string _javaDataPath;
 
     private static string _mainDataFolder;
     
@@ -32,6 +34,8 @@ public static class Services
     private static Dictionary<string, SubmissionDataModel> CSubmissionData { get; set; } = new();
     
     private static Dictionary<string, SubmissionDataModel> PythonSubmissionData { get; set; } = new();
+    
+    private static Dictionary<string, SubmissionDataModel> JavaSubmissionData { get; set; } = new();
     
    //initilize service fields like a constructor
     public static void Initialize(ILoggerFactory loggerFactory, string contentRootPath)
@@ -54,6 +58,7 @@ public static class Services
         _generalDataPath = Path.Combine(_mainDataFolder, "General_Data.csv");
         _cDataPath = Path.Combine(_mainDataFolder, "C_Data.cvs");
         _pythongDataPath = Path.Combine(_mainDataFolder, "Python_Data.csv");
+        _javaDataPath = Path.Combine(_mainDataFolder, "Java_Data.csv");
     }
 
     private static string GetOrCreateDepartmentDirectory(SubmissionFolderType submissionFolderType, StudentDepartment department)
@@ -93,6 +98,12 @@ public static class Services
             var data= File.ReadAllLines(_cDataPath).ToList();
             CSubmissionData = data.ConvertToSubmissionsDataModel();
         }
+        
+        if (IsFileExist(_javaDataPath))
+        {
+            var data= File.ReadAllLines(_javaDataPath).ToList();
+            JavaSubmissionData = data.ConvertToSubmissionsDataModel();
+        }
        
     }
     private static void TryDeleteFile(string filePath)
@@ -114,6 +125,15 @@ public static class Services
         }
     }
     
+    private static bool IsValidStudentId(string studentId)
+    {
+        string matNoPattern = @"^UG/\d{2}/\d{4}$";
+        string regNoPattern = @"^\d{8}[A-Z]{2}$";
+        Regex matNoRegex = new(matNoPattern);
+        Regex regNorRegex = new(regNoPattern); 
+        return (matNoRegex.IsMatch(studentId.ToUpper())|| regNorRegex.IsMatch(studentId.ToUpper()));
+    }
+    
     //private helper methods for  data actions
     private static Dictionary<string, GeneralDataModel> ConvertToGeneralDataModel(this List<string> data)
     {
@@ -127,9 +147,9 @@ public static class Services
                     StudentId = lineData[0], 
                     StudentIdType= Enum.Parse<StudentIdType>(lineData[1]),
                     Department = Enum.Parse<StudentDepartment>(lineData[2]),
-                    FirstName = lineData[3],
-                    SurnName = lineData[5],
-                    MiddleName = lineData[5]
+                    Firstname = lineData[3],
+                    Surname = lineData[4],
+                    Middlename = lineData[5]
                 }
             );
     }
@@ -167,12 +187,7 @@ public static class Services
     {
         var errors = new Dictionary<string, string>();
 
-        bool IsValidStudentId(string studentId)
-        {
-            string pattern = @"^UG/\d{2}/\d{4}$";
-            Regex regex = new(pattern);
-            return regex.IsMatch(studentId.ToUpper());
-        }
+        
         void AddErrorIfEmpty(string value, string fieldName)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -186,9 +201,8 @@ public static class Services
         {
             errors.Add(nameof(model.StudentId), "Invalid Student Id");
         }
-        AddErrorIfEmpty(model.SurnName, nameof(model.SurnName));
-        AddErrorIfEmpty(model.FirstName, nameof(model.FirstName));
-        
+        AddErrorIfEmpty(model.Surname, nameof(model.Surname));
+        AddErrorIfEmpty(model.Firstname, nameof(model.Firstname));
         
         if (!Enum.IsDefined(typeof(StudentDepartment), model.Department))
         {
@@ -200,7 +214,7 @@ public static class Services
    
     private static async Task<bool> AddGeneralDataToFile(this  GeneralDataModel newData)
     {
-        var data = $"{newData.StudentId},{newData.StudentIdType},{newData.Department},{newData.SurnName},{newData.FirstName},{newData.MiddleName??" "}";
+        var data = $"{newData.StudentId},{newData.StudentIdType},{newData.Department},{newData.Firstname},{newData.Surname},{newData.Middlename??" "}";
 
         try
         {
@@ -211,10 +225,60 @@ public static class Services
         }
         catch (Exception exception)
         {
-         _dataActionsLogger.LogInformation($"An Error Occured while updating student data with id {newData.StudentId} to file");
+         _dataActionsLogger.LogInformation($"An Error Occured while adding student data with id {newData.StudentId} to file");
          _dataActionsLogger.LogError(exception.Message);
          return false;
         }
+    }
+    
+    private static async  Task<bool> UpdateGeneralStudentDataToFile(this GeneralDataModel newData, string studentId)
+    {
+        
+        var data = $"{newData.StudentId},{newData.StudentIdType},{newData.Department},{newData.Firstname},{newData.Surname},{newData.Middlename??" "}";
+        
+        var tempFilePath = GetRandomTempDataFilePath();
+        try
+        {
+            using var reader = new StreamReader(_generalDataPath);
+            using var writer = new StreamWriter(tempFilePath);
+
+            string? line;
+
+            while ((line = await reader.ReadLineAsync()) != null)
+            {
+                string[] parts = line.Split(",");
+
+                
+                if (parts[0] == studentId)
+                {
+                    await writer.WriteLineAsync(data);
+                    _dataActionsLogger.LogInformation(
+                        $"successfully updated general submission data for {newData.StudentId}");
+                }
+                else
+                {
+                    await writer.WriteLineAsync(line);
+                }
+                
+            }
+            
+            File.Move(tempFilePath, _generalDataPath, true);
+            
+            
+        }
+        catch (Exception exception)
+        {
+            _dataActionsLogger.LogInformation(
+                $"error occured while adding updating general submission data for {newData.StudentId}");
+            _dataActionsLogger.LogError(exception.Message);
+            return false;
+        }
+        finally
+        {
+            TryDeleteFile(tempFilePath);
+        }
+
+        return true;
     }
     
     //endpoint actions for general data
@@ -233,9 +297,9 @@ public static class Services
             StudentId = generalData.StudentId,
             StudentIdType= generalData.StudentIdType.ToString(),
             Department = generalData.Department.ToString(),
-            FirstName = generalData.FirstName,
-            SurnName = generalData.SurnName,
-            MiddleName = generalData.MiddleName
+            Firstname = generalData.Firstname,
+            Surname= generalData.Surname,
+            Middlename = generalData.Middlename
         }, Status=GeneralSubmissionDataStatus.Present.ToString(), Message="General Student Data Found"});
     }
     
@@ -256,9 +320,9 @@ public static class Services
                 StudentId = generalData.StudentId,
                 StudentIdType = generalData.StudentIdType.ToString(),
                 Department = generalData.Department.ToString(),
-                FirstName = generalData.FirstName,
-                SurnName = generalData.SurnName,
-                MiddleName = generalData.MiddleName
+                Firstname = generalData.Firstname,
+                Surname = generalData.Surname,
+                Middlename = generalData.Middlename
             }, Status=GeneralSubmissionDataStatus.Present.ToString(), Message="General Student Data Already Exists"});
         }
         var status= await generalStudentData.AddGeneralDataToFile();
@@ -271,7 +335,39 @@ public static class Services
            return Results.Json(new{Status=GeneralSubmissionDataStatus.Added.ToString(), Message="General Student Data Successfully Added"});
     }
     
-    //TODO: implment method and endpoint to update general student data
+    
+    public static async Task<IResult> UpdateGeneralStudentSubmissionData(GeneralDataModel newGeneralStudentData, string studentId)
+    {
+        Console.WriteLine("this method was called");
+        
+        var data = GeneralSubmissionData.TryGetValue(studentId, out var generalData);
+        
+        if (!data)
+        {
+            _dataActionsLogger.LogInformation($"student data with id {studentId} Not Found");
+            return Results.Json(new{Status=GeneralSubmissionDataStatus.NotPresent.ToString(), Message="General Student Data Not Found or present for update"});
+        }
+        var validationErrors = ValidateGeneralDataModel(newGeneralStudentData);
+        if (validationErrors.Any())
+        {
+            return Results.Json(new { Status = GeneralSubmissionDataStatus.Failed.ToString(), Errors = validationErrors, Message="Unable to update data due to validation Errors" });
+        }
+        
+        var status= await newGeneralStudentData.UpdateGeneralStudentDataToFile(studentId);
+        if (!status)
+        {
+            return Results.Json(new{Status=GeneralSubmissionDataStatus.Failed.ToString(), Message="An Error Occured while Updating General Student Data"});
+        }
+        
+        
+        GeneralSubmissionData.Remove(studentId);
+        GeneralSubmissionData[newGeneralStudentData.StudentId] = newGeneralStudentData;
+        
+        //TODO: Implement Updating of student Data Across all Files
+        
+       _dataActionsLogger.LogInformation($"student data with id {newGeneralStudentData.StudentId} Successfully Updated");
+        return Results.Json(new{Status=GeneralSubmissionDataStatus.Updated.ToString(), Message="General Student Data Successfully Updated"});
+    }
     
     //private helper method for file actions
 
@@ -317,7 +413,7 @@ public static class Services
         var errors = new Dictionary<string, string>();
         if (ValidateFile(file))
         {
-            errors.Add("File", "File is required");
+            errors.Add("File","File is required");
         }
         if (!ValidateFileSize(file, fileSize))
         {
@@ -325,7 +421,7 @@ public static class Services
         }
         if (!ValidateFileTypeAndExtension(file, fileType))
         {
-            errors.Add("File", $"Invalid File Type or Extension, must be a {fileType.ToString()} with a .{fileType.ToString()} extension");
+            errors.Add("File",$"Invalid File Type or Extension, must be a {fileType.ToString()} with a .{fileType.ToString()} extension");
         }
         return errors;
     }
@@ -347,7 +443,7 @@ public static class Services
         {
           id=ConvertMatricNumberToNamingFormat(data.StudentId);
         }
-        return $"{data.SurnName}_{data.FirstName}{(string.IsNullOrWhiteSpace(data.MiddleName) ? "" : $"_{data.MiddleName}")}_{id}_{assignmentNumber}.{fileType}";
+        return $"{data.Firstname}_{data.Surname}{(string.IsNullOrWhiteSpace(data.Middlename) ? "" : $"_{data.Middlename}")}_{id}_{assignmentNumber}.{fileType}";
     }
     
     private static string GetStudentFolderPath(GeneralDataModel data)
@@ -358,7 +454,7 @@ public static class Services
         {
             id=ConvertMatricNumberToNamingFormat(data.StudentId);
         }
-        return $"{id}_{data.SurnName}_{data.FirstName}{(string.IsNullOrWhiteSpace(data.MiddleName) ? "" : $"_{data.MiddleName}")}";
+        return $"{data.Firstname}_{data.Surname}{(string.IsNullOrWhiteSpace(data.Middlename) ? "" : $"_{data.Middlename}_{id}")}";
     }
     
     private static (string, string) ComputeSubmissionFilePath(FileSubmissionRequestModel submissionRequestData)
@@ -488,9 +584,15 @@ public static class Services
                     _dataActionsLogger.LogInformation(
                         $"successfully updated code file submission data for {newData.StudentId}  assignment number {submissionData.AssignmentNumber}");
                 }
+                else
+                {
+                    await writer.WriteLineAsync(line);
+                }
 
-                await writer.WriteLineAsync(line);
+                
             }
+            
+            File.Move(tempFilePath, filePath, true);
             
             
         }
@@ -631,28 +733,136 @@ public static class Services
         }
     }
     
-    //TODO: implment validation for submision reqes data
     
-    //public endpoint actions for  file submissions
     
-    public static async Task<IResult> SubmitPythonAssignmentFile(FileSubmissionRequestModel submissionRequestData)
+    private static Dictionary<string, Dictionary<string, string>> ValidateSubmissionRequestData(
+        FileSubmissionRequestModel submissionRequestData)
     {
-        var validationErrors = ValidateFile(submissionRequestData.File, submissionRequestData.FileType, MaxCodeFileSize);
+        var errors = new Dictionary<string,Dictionary<string,string>>();
+
+        var studentDataErrors = ValidateGeneralDataModel(submissionRequestData.StudentData);
+
+        var maxFileSize = submissionRequestData.SubmissionFileType == SubmissionFileType.Code
+            ? MaxCodeFileSize
+            : MaxVideoFileSize;
+
+        var fileError = ValidateFile(submissionRequestData.File, submissionRequestData.FileType, maxFileSize);
+
+        if (studentDataErrors.Any())
+        {
+            errors.Add("StudentData", studentDataErrors);
+        }
+
+        if (fileError.Any())
+        {
+            errors.Add("File",fileError);
+        }
+        
+        if (!Enum.IsDefined(typeof(FileType), submissionRequestData.FileType))
+        {
+            errors.Add(nameof(submissionRequestData.FileType), new Dictionary<string, string>{{"FileType", "Invalid File Type"}});
+            
+        }
+        
+        if (!Enum.IsDefined(typeof(SubmissionFileType), submissionRequestData.SubmissionFileType))
+        {
+            errors.Add(nameof(submissionRequestData.SubmissionFileType), new Dictionary<string, string>{{"SubmissionFileType", "Invalid Submission File Type"}});
+        }
+        
+        if (!Enum.IsDefined(typeof(SubmissionFolderType), submissionRequestData.SubmissionFolderType))
+        {
+            errors.Add(nameof(submissionRequestData.SubmissionFolderType), new Dictionary<string, string>{{"SubmissionFolderType", "Invalid Submission Folder Type"}});
+        }
+        //TODO: Add more validations(specifically assignment number)
+
+        return errors;
+    }
+
+    private static Dictionary<string, SubmissionDataModel> GetSubmissionDataDictionaryByType(
+        AssigmentType assignmentType)
+    {
+        return assignmentType switch
+        {
+            AssigmentType.C => CSubmissionData,
+            AssigmentType.Python => PythonSubmissionData,
+            AssigmentType.Java => JavaSubmissionData,
+            _ => throw new ArgumentOutOfRangeException(nameof(assignmentType), "Invalid Assignment Type")
+
+        };
+    }
+
+    private static string GetSubmissionDataFilePathByType(AssigmentType assignmentType)
+    {
+        return assignmentType switch
+        {
+            AssigmentType.C => _cDataPath,
+            AssigmentType.Python => _pythongDataPath,
+            AssigmentType.Java => _javaDataPath,
+            _ => throw new ArgumentOutOfRangeException(nameof(assignmentType), "Invalid Assignment Type")
+
+        };
+    }
+
+    //public endpoint to get current submitted assignments data
+    
+    public static IResult GetCurrentSubmittedAssignmentsData(string studentId, AssigmentType assignmentType)
+    {
+        var data = assignmentType switch
+        {
+            AssigmentType.C => CSubmissionData.TryGetValue(studentId, out var cData) ? cData : null,
+            AssigmentType.Python => PythonSubmissionData.TryGetValue(studentId, out var pythonData) ? pythonData : null,
+            AssigmentType.Java => JavaSubmissionData.TryGetValue(studentId, out var javaData) ? javaData : null,
+            _ => null
+        };
+    
+        if (data == null)
+        {
+            _dataActionsLogger.LogInformation($"student data with id {studentId} Not Found");
+            return Results.Json(new 
+            { 
+                Status = FileSubmissionStatus.Failed.ToString(), 
+                Message = "Student Data Not Found" 
+            });
+        }
+    
+        _dataActionsLogger.LogInformation($"student data with id {studentId} Found");
+        return Results.Json(new 
+        { 
+            Data = new SubmissionDataModel
+            {
+                StudentId = data.StudentId,
+                Department = data.Department,
+                SubmittedAssignmentCodeFiles = data.SubmittedAssignmentCodeFiles,
+                SubmittedAssignmentVideoFiles = data.SubmittedAssignmentVideoFiles
+            }, 
+            Status = FileSubmissionStatus.Successfull.ToString(), 
+            Message = "Student Data Found" 
+        });
+    }
+    
+    //public endpoint actions for file submissions
+    
+    public static async Task<IResult> SubmitAssignmentFile(FileSubmissionRequestModel submissionRequestData, AssigmentType assigmentType)
+    {
+        var validationErrors = ValidateSubmissionRequestData(submissionRequestData);
         if (validationErrors.Any())
         {
             return Results.Json(new { Status = FileSubmissionStatus.Failed.ToString(), Errors = validationErrors, Message="Validation Errors" });
         }
+
+        var submissionDataDictionary = GetSubmissionDataDictionaryByType(assigmentType);
+        var submissionDataFilepath = GetSubmissionDataFilePathByType(assigmentType);
         var result= await submissionRequestData.SaveFileToStorage();
 
         if (!result)
         {
             return Results.Json(new{Status=FileSubmissionStatus.Failed, Message="An Error Occured while Uploading File"}); 
         }
-        var data = PythonSubmissionData.TryGetValue(submissionRequestData.StudentData.StudentId, out var currentGeneralData);
+        var data = submissionDataDictionary.TryGetValue(submissionRequestData.StudentData.StudentId, out var currentGeneralData);
         
         if (!data)
         {
-            _fileActionsLogger.LogInformation($"submiting python {submissionRequestData.SubmissionFileType.ToString()} file for student with id {submissionRequestData.StudentData.StudentId} assignment number {submissionRequestData.AssignmentNumber}");
+            _fileActionsLogger.LogInformation($"submiting {assigmentType} {submissionRequestData.SubmissionFileType.ToString()} file for student with id {submissionRequestData.StudentData.StudentId} assignment number {submissionRequestData.AssignmentNumber}");
             var model = submissionRequestData.GenerateAddAssignmentSubmissionRequestDataModel();
             var status = await model.AddAssignmentSubmissionDataToFile(_pythongDataPath, submissionRequestData.SubmissionFileType);
             if (!status)
@@ -670,7 +880,7 @@ public static class Services
                 submissionRequestData.SubmissionFileType);
 
         var updateResultStatus =
-            await updatedGeneralData.UpdateAssignmentSubmissionDataToFile(_pythongDataPath,
+            await updatedGeneralData.UpdateAssignmentSubmissionDataToFile(submissionDataFilepath,
                 submissionRequestData.SubmissionFileType);
         
         if (!updateResultStatus)
@@ -680,10 +890,9 @@ public static class Services
             return Results.Json(new{Status=FileSubmissionStatus.Failed, Message="An Error Occured while Uploading File"});
         }
 
-       submissionRequestData.UpdateAssignmentSubmissionDataToDictionary(PythonSubmissionData);
+       submissionRequestData.UpdateAssignmentSubmissionDataToDictionary(submissionDataDictionary);
        return Results.Json(new{Status=FileSubmissionStatus.Successfull, Message="File Successfully Uploaded"}); 
     }
-    
-    //TODO: Add Java Submisson Functionality
-    
 }
+    
+   

@@ -9,5 +9,7 @@ public static class Routes
         app.MapGet("/student/{studentId}", Services.CheckForGeneralStudentSubmissionData);
         
         app.MapPost("/student",(GeneralDataModel generalStudentData)=> Services.AddGeneralStudentSubmissionData(generalStudentData));
+        
+        app.MapPut("/student",(GeneralDataModel generalStudentData, string studentId)=> Services.UpdateGeneralStudentSubmissionData(generalStudentData, studentId));
     }
 }

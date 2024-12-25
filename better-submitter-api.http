@@ -14,8 +14,26 @@ Accept: application/json
 {
   "StudentId": "UG/19/0730",
   "Department": 3,
-  "SurnName": "Gboun",
-  "FirstName": "Marvellous",
-  "MiddleName": "Emmanuel"
+  "Surname": "Gboun",
+  "Firstname": "Marvellous",
+  "Middlename": "Emmanuel"
 }
+
+###
+
+
+PUT {{better_submitter_api_HostAddress}}/student/?studentId=UG/19/0760
+Content-Type: application/json
+Accept: application/json
+
+
+{
+  "StudentId": "UG/19/0760",
+  "Department": 3,
+  "Surname": "Gboun",
+  "Firstname": "Marvlous",
+  "Middlename": "Emmanuel"
+}
+
+
 ###

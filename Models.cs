@@ -7,11 +7,11 @@ public class GeneralDataModel
     public StudentIdType StudentIdType { get; set; }
     public StudentDepartment Department { get; set; }
     
-    public string SurnName { get; set; }
+    public string Surname { get; set; }
     
-    public string FirstName { get; set; }
+    public string Firstname { get; set; }
     
-    public string? MiddleName { get; set; }
+    public string? Middlename { get; set; }
 }
 
 public class SubmissionDataModel
@@ -38,9 +38,9 @@ public class GeneralDataModelResponse
     
     public string StudentIdType { get; set; }
     public string Department { get; set; }
-    public string FirstName { get; set; }
-    public string SurnName { get; set; }
-    public string? MiddleName { get; set; }
+    public string Firstname { get; set; }
+    public string Surname { get; set; }
+    public string? Middlename { get; set; }
 }
 
 public class FileSubmissionRequestModel
@@ -59,7 +59,8 @@ public class FileSubmissionRequestModel
 public enum AssigmentType
 {
     C,
-    Python
+    Python,
+    Java
 }
 
 public enum StudentIdType

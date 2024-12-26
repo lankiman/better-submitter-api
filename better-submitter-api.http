@@ -3,7 +3,7 @@
 GET {{better_submitter_api_HostAddress}}/hello
 Accept: application/json
 ###
-GET {{better_submitter_api_HostAddress}}/student/1
+GET {{better_submitter_api_HostAddress}}/student/?studentId=UG/19/0630
 Accept: application/json
 ###
 
@@ -12,8 +12,8 @@ Content-Type: application/json
 Accept: application/json
 
 {
-  "StudentId": "UG/19/0730",
-  "Department": 3,
+  "StudentId": "",
+  "Department": "Mechanical",
   "Surname": "Gboun",
   "Firstname": "Marvellous",
   "Middlename": "Emmanuel"

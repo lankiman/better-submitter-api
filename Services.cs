@@ -149,7 +149,7 @@ public static class Services
                     Department = Enum.Parse<StudentDepartment>(lineData[2]),
                     Firstname = lineData[3],
                     Surname = lineData[4],
-                    Middlename = lineData[5]
+                    Middlename = lineData[5] ?? ""
                 }
             );
     }
@@ -197,24 +197,27 @@ public static class Services
         }
 
         AddErrorIfEmpty(model.StudentId, nameof(model.StudentId));
-        if(!IsValidStudentId(model.StudentId))
+        if(!string.IsNullOrWhiteSpace(model.StudentId) && !IsValidStudentId(model.StudentId))
         {
             errors.Add(nameof(model.StudentId), "Invalid Student Id");
         }
         AddErrorIfEmpty(model.Surname, nameof(model.Surname));
         AddErrorIfEmpty(model.Firstname, nameof(model.Firstname));
-        
-        if (!Enum.IsDefined(typeof(StudentDepartment), model.Department))
-        {
-            errors.Add(nameof(model.Department), "Invalid Department");
-        }
 
+        if (!Enum.TryParse<StudentDepartment>(model.Department.ToString(), true, out var parsedDepartment) || 
+            !Enum.IsDefined(typeof(StudentDepartment), parsedDepartment))
+        {
+            errors.Add(nameof(model.Department), $"'{model.Department}' is not a valid department.");
+        }
+        
         return errors;
     }
+    
+    //TODO: implmenent custom model bindging and deserializatin for enum types
    
     private static async Task<bool> AddGeneralDataToFile(this  GeneralDataModel newData)
     {
-        var data = $"{newData.StudentId},{newData.StudentIdType},{newData.Department},{newData.Firstname},{newData.Surname},{newData.Middlename??" "}";
+        var data = $"{newData.StudentId},{newData.StudentIdType},{newData.Department},{newData.Firstname},{newData.Surname}{(string.IsNullOrWhiteSpace(newData.Middlename) ? "" : $",{newData.Middlename}")}";
 
         try
         {
@@ -234,7 +237,7 @@ public static class Services
     private static async  Task<bool> UpdateGeneralStudentDataToFile(this GeneralDataModel newData, string studentId)
     {
         
-        var data = $"{newData.StudentId},{newData.StudentIdType},{newData.Department},{newData.Firstname},{newData.Surname},{newData.Middlename??" "}";
+        var data = $"{newData.StudentId},{newData.StudentIdType},{newData.Department},{newData.Firstname},{newData.Surname}{(string.IsNullOrWhiteSpace(newData.Middlename) ? "" : $",{newData.Middlename}")}";
         
         var tempFilePath = GetRandomTempDataFilePath();
         try
@@ -282,7 +285,7 @@ public static class Services
     }
     
     //endpoint actions for general data
-    public static async Task<IResult> CheckForGeneralStudentSubmissionData(string studentId)
+    public static IResult CheckForGeneralStudentSubmissionData(string studentId)
     {
         var data = GeneralSubmissionData.TryGetValue(studentId, out var generalData);
         if (!data)

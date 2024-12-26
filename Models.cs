@@ -1,3 +1,6 @@
+
+using System.Runtime.Serialization;
+
 namespace better_submitter_api;
 
 public class GeneralDataModel
@@ -92,12 +95,19 @@ public enum SubmissionFolderType
 }
 public enum StudentDepartment
 {
-    Agricultural,
+    [EnumMember(Value = "Agricultural")]
+    Agricultural,  
+    [EnumMember(Value = "Civil")]
     Civil,
+    [EnumMember(Value = "Chemical")] 
     Chemical,
+    [EnumMember(Value = "Electrical")]
     Electrical,
-    Mechanical,
+    [EnumMember(Value = "Marine")]
     Marine,
+    [EnumMember(Value = "Mechanical")] 
+    Mechanical,
+    [EnumMember(Value = "Petroleum")]
     Petroleum
 }
 

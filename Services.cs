@@ -149,7 +149,7 @@ public static class Services
                     Department = Enum.Parse<StudentDepartment>(lineData[2]),
                     Firstname = lineData[3],
                     Surname = lineData[4],
-                    Middlename = lineData[5] ?? ""
+                    Middlename = lineData.Length > 5 ? lineData[5] : ""
                 }
             );
     }

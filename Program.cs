@@ -16,8 +16,10 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =
 });
 
 
+
 var app = builder.Build();
 var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+
 
 Services.Initialize(loggerFactory, app.Environment.ContentRootPath);
 
@@ -39,5 +41,6 @@ app.UseCors(policy =>
 app.Register();
 
 app.Run();
+
 
 

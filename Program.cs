@@ -29,8 +29,6 @@ if (app.Environment.IsDevelopment())
     app.UseDeveloperExceptionPage();
 }
 
-app.UseHttpsRedirection();
-
 app.UseCors(policy =>
 {
     policy.AllowAnyOrigin()  // Allow any origin

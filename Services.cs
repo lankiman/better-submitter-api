@@ -335,7 +335,7 @@ public static class Services
            }
            GeneralSubmissionData.Add(generalStudentData.StudentId, generalStudentData);
            _dataActionsLogger.LogInformation($"student data with id {generalStudentData.StudentId} Successfully Added");
-           return Results.Json(new{Status=GeneralSubmissionDataStatus.Added.ToString(), Message="General Student Data Successfully Added"});
+           return Results.Json(new{Status=GeneralSubmissionDataStatus.Added.ToString(), Message="Your data was successfully added"});
     }
     
     

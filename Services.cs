@@ -185,9 +185,7 @@ public static class Services
     
     private static Dictionary<string,string> ValidateGeneralDataModel(GeneralDataModel model)
     {
-        var errors = new Dictionary<string, string>();
-
-        
+       var errors = new Dictionary<string, string>();
         void AddErrorIfEmpty(string value, string fieldName)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -298,7 +296,6 @@ public static class Services
         return Results.Json(new{Data=new GeneralDataModelResponse
         {
             StudentId = generalData.StudentId,
-            StudentIdType= generalData.StudentIdType.ToString(),
             Department = generalData.Department.ToString(),
             Firstname = generalData.Firstname,
             Surname= generalData.Surname,
@@ -308,10 +305,14 @@ public static class Services
     
     public static async Task<IResult> AddGeneralStudentSubmissionData(GeneralDataModel generalStudentData)
     {
+        if (generalStudentData == null)
+        {
+            return Results.UnprocessableEntity("General Student Data is required");
+        }
         var validationErrors = ValidateGeneralDataModel(generalStudentData);
         if (validationErrors.Any())
         {
-            return Results.Json(new { Status = GeneralSubmissionDataStatus.Failed.ToString(), Errors = validationErrors, Message="Validation Errors" });
+            return Results.BadRequest(new { Status = GeneralSubmissionDataStatus.Failed.ToString(), Errors = validationErrors, Message="Validation Errors" });
         }
         var data = GeneralSubmissionData.TryGetValue(generalStudentData.StudentId, out var generalData);
         if (data)
@@ -321,7 +322,6 @@ public static class Services
             return Results.Json(new{Data=new GeneralDataModelResponse
             {
                 StudentId = generalData.StudentId,
-                StudentIdType = generalData.StudentIdType.ToString(),
                 Department = generalData.Department.ToString(),
                 Firstname = generalData.Firstname,
                 Surname = generalData.Surname,
@@ -335,7 +335,14 @@ public static class Services
            }
            GeneralSubmissionData.Add(generalStudentData.StudentId, generalStudentData);
            _dataActionsLogger.LogInformation($"student data with id {generalStudentData.StudentId} Successfully Added");
-           return Results.Json(new{Status=GeneralSubmissionDataStatus.Added.ToString(), Message="Your data was successfully added"});
+           return Results.Json(new{Data=new GeneralDataModelResponse
+           {
+               StudentId = generalStudentData.StudentId,
+               Department = generalStudentData.Department.ToString(),
+               Firstname = generalStudentData.Firstname,
+               Surname = generalStudentData.Surname,
+               Middlename = generalStudentData.Middlename
+           }, Status=GeneralSubmissionDataStatus.Added.ToString(), Message="Your data was successfully added"});
     }
     
     

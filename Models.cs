@@ -39,7 +39,6 @@ public class GeneralDataModelResponse
 {
     public string StudentId { get; set; }
     
-    public string StudentIdType { get; set; }
     public string Department { get; set; }
     public string Firstname { get; set; }
     public string Surname { get; set; }

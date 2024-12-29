@@ -7,6 +7,10 @@ GET {{better_submitter_api_HostAddress}}/student/?studentId=UG/19/0630
 Accept: application/json
 ###
 
+GET {{better_submitter_api_HostAddress}}/student/?studentId=UG/19/0630&assignmentType=Python
+Accept: application/json
+###
+
 POST {{better_submitter_api_HostAddress}}/student
 Content-Type: application/json
 Accept: application/json
@@ -26,7 +30,6 @@ PUT {{better_submitter_api_HostAddress}}/student/?studentId=UG/19/0760
 Content-Type: application/json
 Accept: application/json
 
-
 {
   "StudentId": "UG/19/0760",
   "Department": 3,
@@ -34,6 +37,5 @@ Accept: application/json
   "Firstname": "Marvlous",
   "Middlename": "Emmanuel"
 }
-
 
 ###

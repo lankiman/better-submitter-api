@@ -3,11 +3,11 @@
 GET {{better_submitter_api_HostAddress}}/hello
 Accept: application/json
 ###
-GET {{better_submitter_api_HostAddress}}/student/?studentId=UG/19/0630
+GET {{better_submitter_api_HostAddress}}/student/?studentId=UG/19/0730
 Accept: application/json
 ###
 
-GET {{better_submitter_api_HostAddress}}/student/?studentId=UG/19/0630&assignmentType=Python
+GET {{better_submitter_api_HostAddress}}/student/?studentId=UG/19/0731&assignmentType=Python
 Accept: application/json
 ###
 

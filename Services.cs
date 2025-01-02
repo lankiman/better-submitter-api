@@ -17,6 +17,8 @@ public static class Services
     
     private static  string _generalDataPath;
 
+    private static string _assignmentConfigDataPath;
+
     private static  string _cDataPath; 
     
     private static  string _pythongDataPath;
@@ -36,6 +38,13 @@ public static class Services
     private static Dictionary<string, SubmissionDataModel> PythonSubmissionData { get; set; } = new();
     
     private static Dictionary<string, SubmissionDataModel> JavaSubmissionData { get; set; } = new();
+
+    private static Dictionary<string, int> MaxAssignmentNumber { get; set; } = new()
+    {
+        {"Python",5},
+        {"Java",5},
+        {"C", 5}
+    };
     
    //initilize service fields like a constructor
     public static void Initialize(ILoggerFactory loggerFactory, string contentRootPath)
@@ -55,10 +64,12 @@ public static class Services
         _mainDataFolder = mainDataFolder;
         Directory.CreateDirectory(Path.Combine(_mainDataFolder, "PythonSubmissions"));
         Directory.CreateDirectory(Path.Combine(_mainDataFolder, "CSubmissions"));
+        Directory.CreateDirectory(Path.Combine(_mainDataFolder, "JavaSubmissions"));
         _generalDataPath = Path.Combine(_mainDataFolder, "General_Data.csv");
-        _cDataPath = Path.Combine(_mainDataFolder, "C_Data.cvs");
+        _cDataPath = Path.Combine(_mainDataFolder, "C_Data.csv");
         _pythongDataPath = Path.Combine(_mainDataFolder, "Python_Data.csv");
         _javaDataPath = Path.Combine(_mainDataFolder, "Java_Data.csv");
+        _assignmentConfigDataPath = Path.Combine(_mainDataFolder, "Assignment_Config.csv");
     }
 
     private static string GetOrCreateDepartmentDirectory(SubmissionFolderType submissionFolderType, StudentDepartment department)
@@ -104,6 +115,12 @@ public static class Services
             var data= File.ReadAllLines(_javaDataPath).ToList();
             JavaSubmissionData = data.ConvertToSubmissionsDataModel();
         }
+
+        if (IsFileExist(_assignmentConfigDataPath))
+        {
+            var data = File.ReadAllLines(_assignmentConfigDataPath).ToList();
+            MaxAssignmentNumber = data.ConvertToMaxAssignmentNumberDictionary();
+        }
        
     }
     private static void TryDeleteFile(string filePath)
@@ -135,6 +152,15 @@ public static class Services
     }
     
     //private helper methods for  data actions
+
+
+    private static Dictionary<string, int> ConvertToMaxAssignmentNumberDictionary(this List<string> data)
+    {
+        return data.Select(line => {
+            var lineData = line.Split(",");
+            return new KeyValuePair<string, int>(lineData[0], int.Parse(lineData[1]));
+        }).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+    }
     private static Dictionary<string, GeneralDataModel> ConvertToGeneralDataModel(this List<string> data)
     {
       
@@ -377,6 +403,48 @@ public static class Services
         
        _dataActionsLogger.LogInformation($"student data with id {newGeneralStudentData.StudentId} Successfully Updated");
         return Results.Json(new{Status=GeneralSubmissionDataStatus.Updated.ToString(), Message="General Student Data Successfully Updated"});
+    }
+    
+    public static IResult GetAssignmentMetaData(string studentId, string assignmentType)
+    {
+        if (!Enum.TryParse<AssigmentType>(assignmentType, true, out var parsedAssignmentType) || 
+            !Enum.IsDefined(typeof(AssigmentType), parsedAssignmentType))
+        {
+            return Results.BadRequest(new { Status = GeneralSubmissionDataStatus.Failed.ToString(), Message = "Invalid Assignment Type" });
+        }
+        
+        var maxNumber = MaxAssignmentNumber[assignmentType];
+        
+        var data = GetSubmissionDataDictionaryByType(parsedAssignmentType);
+        
+        if (!data.TryGetValue(studentId, out var generalData))
+        {
+            _dataActionsLogger.LogInformation($"student data with id {studentId} has not submitted any assignment on {parsedAssignmentType}");
+            return Results.Json(new{Data= new AssignmentMetaDataResponse()
+                {
+                    MaxAssignmentNumber = maxNumber,
+                    SubmittableVidoFiles = [],
+                    SubmittableCodeFiles = []
+                }
+                , Status=GeneralSubmissionDataStatus.NotPresent.ToString(), Message=$"Student has not submitted any assignment on {parsedAssignmentType}"});
+        }
+        var codeFilesData = generalData.SubmittedAssignmentCodeFiles;
+
+        var videoFilesData = generalData.SubmittedAssignmentVideoFiles;
+
+        var submittableVideoFiles = videoFilesData.Where(file => file.Value.CanBeResubmitted == false).Select(keys=>keys.Key).ToList();
+        
+        var submittableCodeFiles= codeFilesData.Where(file => file.Value.CanBeResubmitted == false).Select(keys=>keys.Key).ToList();
+
+        return Results.Json(new
+        {
+            Status = GeneralSubmissionDataStatus.Present.ToString(), Data = new AssignmentMetaDataResponse()
+            {
+                MaxAssignmentNumber = maxNumber,
+                SubmittableVidoFiles = submittableVideoFiles,
+                SubmittableCodeFiles = submittableCodeFiles
+            }
+        });
     }
     
     //private helper method for file actions

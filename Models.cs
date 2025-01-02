@@ -124,3 +124,12 @@ public enum FileSubmissionStatus
     Successfull,
     Failed
 }
+
+public class AssignmentMetaDataResponse
+{
+    public int MaxAssignmentNumber { get; set; }
+    
+    public List<int> SubmittableCodeFiles { get; set; }
+    
+    public List<int> SubmittableVidoFiles { get; set; }
+}

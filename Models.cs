@@ -129,7 +129,7 @@ public class AssignmentMetaDataResponse
 {
     public int MaxAssignmentNumber { get; set; }
     
-    public List<int> SubmittableCodeFiles { get; set; }
+    public List<int> NotSubmittableCodeFiles { get; set; }
     
-    public List<int> SubmittableVidoFiles { get; set; }
+    public List<int> NotSubmittableVideoFiles { get; set; }
 }

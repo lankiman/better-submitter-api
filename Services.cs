@@ -415,8 +415,7 @@ public static class Services
                 Status = GeneralSubmissionDataStatus.NotPresent.ToString(),
                 Message = "General Student Data Not Found or present for update"
             });
-        }
-
+        } 
         var validationErrors = ValidateGeneralDataModel(newGeneralStudentData);
         if (validationErrors.Any())
         {

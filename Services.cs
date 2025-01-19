@@ -903,6 +903,8 @@ public static class Services
         var errors = new Dictionary<string, Dictionary<string, string>>();
 
         var studentDataErrors = ValidateGeneralDataModel(submissionRequestData.StudentData);
+        
+        
 
         var maxFileSize = submissionRequestData.SubmissionFileType == SubmissionFileType.Code
             ? MaxCodeFileSize
@@ -910,9 +912,27 @@ public static class Services
 
         var fileError = ValidateFile(submissionRequestData.File, submissionRequestData.FileType, maxFileSize);
 
+        var submissionDataDictionary = GetSubmissionDataDictionaryByType(submissionRequestData.AssigmentType);
+
+        var assigmentMetaDataDictionary = submissionRequestData.SubmissionFileType == SubmissionFileType.Code
+            ? submissionDataDictionary[submissionRequestData.StudentData.StudentId].SubmittedAssignmentCodeFiles
+            : submissionDataDictionary[submissionRequestData.StudentData.StudentId].SubmittedAssignmentVideoFiles;
+        var maxAssignmentNumber = MaxAssignmentNumber[submissionRequestData.AssigmentType.ToString()];
+
         if (studentDataErrors.Any())
         {
             errors.Add("StudentData", studentDataErrors);
+        }
+
+        if (!studentDataErrors.Any())
+        {
+            if (!GeneralSubmissionData.ContainsKey(submissionRequestData.StudentData.StudentId))
+            {
+               errors.Add("StudentData",
+                    new Dictionary<string, string> { { "InvalidStudent", "Student Data does not exist" } });
+               return errors;
+
+            }
         }
 
         if (fileError.Any())
@@ -937,8 +957,17 @@ public static class Services
             errors.Add(nameof(submissionRequestData.AssigmentType),
                 new Dictionary<string, string> { { "AssignmentType", "Invalid Assignment Type" } });
         }
-        //TODO: Add more validations(specifically assignment number)
 
+        if (submissionRequestData.AssignmentNumber > maxAssignmentNumber)
+        {
+            errors.Add(nameof(submissionRequestData.AssignmentNumber), new Dictionary<string, string> { { "AssignmentNumber", "Assignment number exceeds max submittable number" } });
+        }
+
+        if (!assigmentMetaDataDictionary[submissionRequestData.AssignmentNumber].CanBeResubmitted)
+        {
+            errors.Add(nameof(submissionRequestData.AssignmentNumber), new Dictionary<string, string> { { "AssignmentNumber", "This assignment file has been submitted and cannot be resubmitted" } });
+        }
+        
         return errors;
     }
 

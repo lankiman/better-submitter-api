@@ -32,10 +32,32 @@ Accept: application/json
 
 {
   "StudentId": "UG/19/0760",
-  "Department": 3,
+  "Department": "Electrical",
   "Surname": "Gboun",
   "Firstname": "Marvlous",
   "Middlename": "Emmanuel"
 }
-
 ###
+
+POST {{better_submitter_api_HostAddress}}/student/upload
+Content-Type: application/json
+Accept: application/json
+
+{
+  "StudentData": {
+    "StudentId": "UG/19/0760",
+    "StudentIdType": "MatricNumber",
+    "Department": "Electrical",
+    "Surname": "Gboun",
+    "Firstname": "Marvlous",
+    "Middlename": "Emmanuel"
+  },
+  "AssignmentNumber": 1,
+  "SubmissionFileType": 2,
+  "AssigmentType": "C",
+  "FileType": "c",
+  "File": "<file_placeholder>"
+}
+
+
+

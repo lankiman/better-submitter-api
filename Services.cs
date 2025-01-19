@@ -78,6 +78,17 @@ public static class Services
         return departmentFolder.FullName;
     }
 
+    private static SubmissionFolderType ComputeSubmisssionFolderType(AssigmentType assigmentType)
+    {
+        return assigmentType switch
+        {
+            AssigmentType.C => SubmissionFolderType.CSubmissions,
+            AssigmentType.Java => SubmissionFolderType.JavaSubmissions,
+            AssigmentType.Python => SubmissionFolderType.PythonSubmissions,
+            _ => throw new ArgumentOutOfRangeException(nameof(assigmentType), assigmentType, null)
+        };
+    }
+
     private static string GetRandomTempDataFilePath()
     {
         var temp = Path.GetRandomFileName();
@@ -603,7 +614,8 @@ public static class Services
 
     private static (string, string) ComputeSubmissionFilePath(FileSubmissionRequestModel submissionRequestData)
     {
-        var folderPath = GetOrCreateDepartmentDirectory(submissionRequestData.SubmissionFolderType,
+        var submissionType = ComputeSubmisssionFolderType(submissionRequestData.AssigmentType);
+        var folderPath = GetOrCreateDepartmentDirectory(submissionType,
             submissionRequestData.StudentData.Department);
 
         var studentFolderPath = GetStudentFolderPath(submissionRequestData.StudentData);
@@ -611,7 +623,10 @@ public static class Services
         var fileName = GetFileName(submissionRequestData.StudentData, submissionRequestData.AssignmentNumber,
             submissionRequestData.FileType);
 
-        var filePath = Path.Combine(folderPath, studentFolderPath, fileName);
+        var submissionFilePath = submissionRequestData.SubmissionFileType ==
+            SubmissionFileType.Code ? "codeFiles" : "videoFiles";
+
+        var filePath = Path.Combine(folderPath, studentFolderPath, fileName, submissionFilePath);
         return (filePath, fileName);
     }
 
@@ -671,13 +686,13 @@ public static class Services
             await using var writer = new StreamWriter(dataFilePath, append: true);
             await writer.WriteLineAsync(data);
             _dataActionsLogger.LogInformation(
-                $"python code file for {newData.StudentId} assigment number {submissionData.AssignmentNumber} added to file");
+                $"add {submissionFileType} file metadata for {newData.StudentId} assigment number {submissionData.AssignmentNumber} added to file");
             return true;
         }
         catch (Exception exception)
         {
             _dataActionsLogger.LogInformation(
-                $"error occured while adding code file for {newData.StudentId} assignment number {submissionData.AssignmentNumber}");
+                $"error occured while adding {submissionFileType} file metadata for {newData.StudentId} assignment number {submissionData.AssignmentNumber}");
             _dataActionsLogger.LogError(exception.Message);
             return false;
         }
@@ -917,10 +932,10 @@ public static class Services
                 new Dictionary<string, string> { { "SubmissionFileType", "Invalid Submission File Type" } });
         }
 
-        if (!Enum.IsDefined(typeof(SubmissionFolderType), submissionRequestData.SubmissionFolderType))
+        if (!Enum.IsDefined(typeof(AssigmentType), submissionRequestData.AssigmentType))
         {
-            errors.Add(nameof(submissionRequestData.SubmissionFolderType),
-                new Dictionary<string, string> { { "SubmissionFolderType", "Invalid Submission Folder Type" } });
+            errors.Add(nameof(submissionRequestData.AssigmentType),
+                new Dictionary<string, string> { { "AssignmentType", "Invalid Assignment Type" } });
         }
         //TODO: Add more validations(specifically assignment number)
 
@@ -989,8 +1004,7 @@ public static class Services
 
     //public endpoint actions for file submissions
 
-    public static async Task<IResult> SubmitAssignmentFile(FileSubmissionRequestModel submissionRequestData,
-        AssigmentType assigmentType)
+    public static async Task<IResult> SubmitAssignmentFile(FileSubmissionRequestModel submissionRequestData)
     {
         var validationErrors = ValidateSubmissionRequestData(submissionRequestData);
         if (validationErrors.Any())
@@ -1002,8 +1016,8 @@ public static class Services
             });
         }
 
-        var submissionDataDictionary = GetSubmissionDataDictionaryByType(assigmentType);
-        var submissionDataFilepath = GetSubmissionDataFilePathByType(assigmentType);
+        var submissionDataDictionary = GetSubmissionDataDictionaryByType(submissionRequestData.AssigmentType);
+        var submissionDataFilepath = GetSubmissionDataFilePathByType(submissionRequestData.AssigmentType);
         var result = await submissionRequestData.SaveFileToStorage();
 
         if (!result)
@@ -1018,10 +1032,10 @@ public static class Services
         if (!data)
         {
             _fileActionsLogger.LogInformation(
-                $"submiting {assigmentType} {submissionRequestData.SubmissionFileType.ToString()} file for student with id {submissionRequestData.StudentData.StudentId} assignment number {submissionRequestData.AssignmentNumber}");
+                $"submiting {submissionRequestData.AssigmentType} {submissionRequestData.SubmissionFileType.ToString()} file for student with id {submissionRequestData.StudentData.StudentId} assignment number {submissionRequestData.AssignmentNumber}");
             var model = submissionRequestData.GenerateAddAssignmentSubmissionRequestDataModel();
             var status =
-                await model.AddAssignmentSubmissionDataToFile(_pythongDataPath,
+                await model.AddAssignmentSubmissionDataToFile(submissionDataFilepath,
                     submissionRequestData.SubmissionFileType);
             if (!status)
             {
@@ -1031,7 +1045,7 @@ public static class Services
                     { Status = FileSubmissionStatus.Failed, Message = "An Error Occured while Uploading File" });
             }
 
-            PythonSubmissionData.Add(submissionRequestData.StudentData.StudentId, model);
+            submissionDataDictionary.Add(submissionRequestData.StudentData.StudentId, model);
             return Results.Json(new
                 { Status = FileSubmissionStatus.Successfull, Message = "File Successfully Uploaded" });
         }

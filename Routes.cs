@@ -31,6 +31,6 @@ public static class Routes
         app.MapPut("/student",(GeneralDataModel generalStudentData, string studentId)=> Services.UpdateGeneralStudentSubmissionData(generalStudentData, studentId));
 
         app.MapPost("/student/upload",
-            (FileSubmissionRequestModel submissionRequestData) => Services.SubmitAssignmentFile(submissionRequestData));
+            (IFormFile file, FileSubmissionRequestModel submissionRequestData) => Services.SubmitAssignmentFile(submissionRequestData));
     }
 }

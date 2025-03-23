@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <Folder Include="Data\JavaSubmissions\" />
+    <Folder Include="Data\JavaSubmissions\Electrical\" />
     <Folder Include="Data\PythonSubmissions\" />
   </ItemGroup>
 

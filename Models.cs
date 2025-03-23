@@ -54,7 +54,7 @@ public class FileSubmissionRequestModel
   
   public SubmissionFileType SubmissionFileType { get; set; }
   
-  public string AssigmentType { get; set; }
+  public AssigmentType AssignmentType { get; set; }
   public FileType FileType { get; set; }
   
   public IFormFile File { get; set; }  

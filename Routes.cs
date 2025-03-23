@@ -1,3 +1,7 @@
+
+
+using Microsoft.AspNetCore.Mvc;
+
 namespace better_submitter_api;
 
 public static class Routes
@@ -31,6 +35,6 @@ public static class Routes
         app.MapPut("/student",(GeneralDataModel generalStudentData, string studentId)=> Services.UpdateGeneralStudentSubmissionData(generalStudentData, studentId));
 
         app.MapPost("/student/upload",
-            (IFormFile file, FileSubmissionRequestModel submissionRequestData) => Services.SubmitAssignmentFile(submissionRequestData));
+            ( [FromForm] FileSubmissionRequestModel submissionRequestData) => Services.SubmitAssignmentFile(submissionRequestData)).DisableAntiforgery();
     }
 }

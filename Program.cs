@@ -17,6 +17,7 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =
 
 
 var app = builder.Build();
+
 var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
 
 
@@ -35,7 +36,9 @@ app.UseCors(policy =>
         .AllowAnyMethod(); // Allow any HTTP methods
 });
 
+
 app.Register();
+
 
 app.Run();
 

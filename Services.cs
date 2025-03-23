@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Exception = System.Exception;
 
@@ -14,7 +15,7 @@ public static class Services
 
     private static string _generalDataPath;
 
-    private static string _assignmentConfigDataPath;
+    private static string _submitterSettingsDataPath;
 
     private static string _cDataPath;
 
@@ -24,10 +25,9 @@ public static class Services
 
     private static string _mainDataFolder;
 
-    private const long MaxVideoFileSize = 100 * 1024 * 1024; // 100 MB
-    private const long MaxCodeFileSize = 1 * 1024 * 1024; // 1 MB
-
-
+    // private const long MaxVideoFileSize = 100 * 1024 * 1024; // 100 MB
+    // private const long MaxCodeFileSize = 1 * 1024 * 1024; // 1 MB
+    
     private static Dictionary<string, GeneralDataModel> GeneralSubmissionData { get; set; } = new();
 
     private static Dictionary<string, SubmissionDataModel> CSubmissionData { get; set; } = new();
@@ -36,13 +36,38 @@ public static class Services
 
     private static Dictionary<string, SubmissionDataModel> JavaSubmissionData { get; set; } = new();
 
-    private static Dictionary<string, int> MaxAssignmentNumber { get; set; } = new()
-    {
-        { "Python", 5 },
-        { "Java", 5 },
-        { "C", 5 }
+    private static Settings SubmitterSettings { get; set; } = new()
+        {
+            EnableSubmission = true,
+            EnableLanguageSubmission = new LanguageSubmission
+            {
+                Java = new EnableSubmission
+                {
+                    Video = true,
+                    Code = true
+                },
+                C = new EnableSubmission
+                {
+                    Video = true,
+                    Code = true
+                },
+                Python = new EnableSubmission
+                {
+                    Video = true,
+                    Code = true
+                }
+            },
+            AssignmentNumber = new AssignmentNumber
+            {
+                Java = 5,
+                C = 5,
+                Python = 5
+            },
+            MaxCodeFileSize = 1 * 1024 * 1024,
+            MaxVideoFileSize = 100 * 1024 * 1024
+        
     };
-
+    
     //initilize service fields like a constructor
     public static void Initialize(ILoggerFactory loggerFactory, string contentRootPath)
     {
@@ -57,6 +82,7 @@ public static class Services
     //private helper methods
     private static void InitializeDirectories(string mainDataFolder)
     {
+        Console.WriteLine($"Creating main directory: {mainDataFolder}");
         Directory.CreateDirectory(mainDataFolder);
         _mainDataFolder = mainDataFolder;
         Directory.CreateDirectory(Path.Combine(_mainDataFolder, "PythonSubmissions"));
@@ -66,7 +92,13 @@ public static class Services
         _cDataPath = Path.Combine(_mainDataFolder, "C_Data.csv");
         _pythongDataPath = Path.Combine(_mainDataFolder, "Python_Data.csv");
         _javaDataPath = Path.Combine(_mainDataFolder, "Java_Data.csv");
-        _assignmentConfigDataPath = Path.Combine(_mainDataFolder, "AssignmentNumbers_Config.csv");
+        _submitterSettingsDataPath = Path.Combine(_mainDataFolder, "submitter_config.json");
+    }
+
+
+    private static GeneralDataModel GetStudentData(string studentId)
+    {
+        return GeneralSubmissionData[studentId];
     }
 
     private static string GetOrCreateDepartmentDirectory(SubmissionFolderType submissionFolderType,
@@ -127,10 +159,11 @@ public static class Services
             JavaSubmissionData = data.ConvertToSubmissionsDataModel();
         }
 
-        if (IsFileExist(_assignmentConfigDataPath))
+        if (IsFileExist(_submitterSettingsDataPath))
         {
-            var data = File.ReadAllLines(_assignmentConfigDataPath).ToList();
-            MaxAssignmentNumber = data.ConvertToMaxAssignmentNumberDictionary();
+            var data = JsonSerializer.Deserialize<Settings>(File
+                .ReadAllText(_submitterSettingsDataPath));
+            SubmitterSettings = data;
         }
     }
 
@@ -464,6 +497,7 @@ public static class Services
 
     public static IResult GetAssignmentMetaData(string studentId, string assignmentType)
     {
+        Console.WriteLine($"gotten from meta data {assignmentType}");
         if (!Enum.TryParse<AssigmentType>(assignmentType, true, out var parsedAssignmentType) ||
             !Enum.IsDefined(typeof(AssigmentType), parsedAssignmentType))
         {
@@ -471,7 +505,7 @@ public static class Services
                 { Status = GeneralSubmissionDataStatus.Failed.ToString(), Message = "Invalid Assignment Type" });
         }
 
-        var maxNumber = MaxAssignmentNumber[assignmentType];
+        var maxNumber = SubmitterSettings.MaxAssignmentNumber[assignmentType];
 
         var data = GetSubmissionDataDictionaryByType(parsedAssignmentType);
 
@@ -612,21 +646,43 @@ public static class Services
             $"{data.Firstname}_{data.Surname}{(string.IsNullOrWhiteSpace(data.Middlename) ? "" : $"_{data.Middlename}_{id}")}";
     }
 
+    private static AssigmentType GetParsedAssignmentType(string assignmentType)
+    {
+        Enum.TryParse<AssigmentType>(assignmentType, true, out var parsedAssignmentType);
+        return parsedAssignmentType;
+    }
+
+
+    private static bool ValidateAssignmentType(AssigmentType assigmentType)
+    {
+        if (!Enum.IsDefined(typeof(AssigmentType), assigmentType))
+        {
+            return true;
+            // return Results.BadRequest(new
+            //     { Status = GeneralSubmissionDataStatus.Failed.ToString(), Message = "Invalid Assignment Type" });
+        }
+
+        return false;
+    }
+
     private static (string, string) ComputeSubmissionFilePath(FileSubmissionRequestModel submissionRequestData)
     {
-        var submissionType = ComputeSubmisssionFolderType(submissionRequestData.AssigmentType);
+        var studentData = GetStudentData(submissionRequestData.StudentId);
+        var submissionType = ComputeSubmisssionFolderType(GetParsedAssignmentType(submissionRequestData.AssigmentType));
         var folderPath = GetOrCreateDepartmentDirectory(submissionType,
-            submissionRequestData.StudentData.Department);
+            studentData.Department);
 
-        var studentFolderPath = GetStudentFolderPath(submissionRequestData.StudentData);
+        var studentFolderPath = GetStudentFolderPath(studentData);
 
-        var fileName = GetFileName(submissionRequestData.StudentData, submissionRequestData.AssignmentNumber,
+        var fileName = GetFileName(studentData, submissionRequestData.AssignmentNumber,
             submissionRequestData.FileType);
+        
+        // var submissionFilePath = submissionRequestData.SubmissionFileType ==
+        //     SubmissionFileType.Code ? "codeFiles" : "videoFiles";
 
-        var submissionFilePath = submissionRequestData.SubmissionFileType ==
-            SubmissionFileType.Code ? "codeFiles" : "videoFiles";
+        var folder = Directory.CreateDirectory(Path.Combine(folderPath, studentFolderPath));
 
-        var filePath = Path.Combine(folderPath, studentFolderPath, fileName, submissionFilePath);
+        var filePath = Path.Combine(folder.FullName, fileName);
         return (filePath, fileName);
     }
 
@@ -779,12 +835,13 @@ public static class Services
     private static SubmissionDataModel GenerateAddAssignmentSubmissionRequestDataModel(
         this FileSubmissionRequestModel submissionRequestData)
     {
+        var studentData = GetStudentData(submissionRequestData.StudentId);
         if (submissionRequestData.SubmissionFileType == SubmissionFileType.Code)
         {
             return new SubmissionDataModel
             {
-                StudentId = submissionRequestData.StudentData.StudentId,
-                Department = submissionRequestData.StudentData.Department,
+                StudentId = studentData.StudentId,
+                Department = studentData.Department,
                 SubmittedAssignmentCodeFiles = new Dictionary<int, AssignmentSubmisssion>
                 {
                     {
@@ -802,8 +859,8 @@ public static class Services
 
         return new SubmissionDataModel
         {
-            StudentId = submissionRequestData.StudentData.StudentId,
-            Department = submissionRequestData.StudentData.Department,
+            StudentId = studentData.StudentId,
+            Department = studentData.Department,
             SubmittedAssignmentCodeFiles = new(),
             SubmittedAssignmentVideoFiles = new Dictionary<int, AssignmentSubmisssion>
             {
@@ -868,29 +925,30 @@ public static class Services
     private static void UpdateAssignmentSubmissionDataToDictionary(
         this FileSubmissionRequestModel submissionRequestModel, Dictionary<string, SubmissionDataModel> dictionary)
     {
+        var studentData = GetStudentData(submissionRequestModel.StudentId);
         if (submissionRequestModel.SubmissionFileType == SubmissionFileType.Code)
         {
-            var currentSubmissionCount = dictionary[submissionRequestModel.StudentData.StudentId]
+            var currentSubmissionCount = dictionary[studentData.StudentId]
                 .SubmittedAssignmentCodeFiles[submissionRequestModel.AssignmentNumber].SubmissionCount;
-            dictionary[submissionRequestModel.StudentData.StudentId]
+            dictionary[studentData.StudentId]
                     .SubmittedAssignmentCodeFiles[submissionRequestModel.AssignmentNumber].SubmissionCount =
                 currentSubmissionCount + 1;
-            currentSubmissionCount = dictionary[submissionRequestModel.StudentData.StudentId]
+            currentSubmissionCount = dictionary[studentData.StudentId]
                 .SubmittedAssignmentCodeFiles[submissionRequestModel.AssignmentNumber].SubmissionCount;
-            dictionary[submissionRequestModel.StudentData.StudentId]
+            dictionary[studentData.StudentId]
                     .SubmittedAssignmentCodeFiles[submissionRequestModel.AssignmentNumber].CanBeResubmitted =
                 currentSubmissionCount < 2;
         }
         else
         {
-            var currentSubmissionCount = dictionary[submissionRequestModel.StudentData.StudentId]
+            var currentSubmissionCount = dictionary[studentData.StudentId]
                 .SubmittedAssignmentVideoFiles[submissionRequestModel.AssignmentNumber].SubmissionCount;
-            dictionary[submissionRequestModel.StudentData.StudentId]
+            dictionary[studentData.StudentId]
                     .SubmittedAssignmentVideoFiles[submissionRequestModel.AssignmentNumber].SubmissionCount =
                 currentSubmissionCount + 1;
-            currentSubmissionCount = dictionary[submissionRequestModel.StudentData.StudentId]
+            currentSubmissionCount = dictionary[studentData.StudentId]
                 .SubmittedAssignmentVideoFiles[submissionRequestModel.AssignmentNumber].SubmissionCount;
-            dictionary[submissionRequestModel.StudentData.StudentId]
+            dictionary[studentData.StudentId]
                     .SubmittedAssignmentVideoFiles[submissionRequestModel.AssignmentNumber].CanBeResubmitted =
                 currentSubmissionCount < 2;
         }
@@ -901,40 +959,49 @@ public static class Services
         FileSubmissionRequestModel submissionRequestData)
     {
         var errors = new Dictionary<string, Dictionary<string, string>>();
-
-        var studentDataErrors = ValidateGeneralDataModel(submissionRequestData.StudentData);
         
-        
+        if (!GeneralSubmissionData.ContainsKey(submissionRequestData.StudentId))
+        {
+            errors.Add("StudentData",
+                new Dictionary<string, string> { { "InvalidStudent", "Student Data does not exist" } });
+            return errors;
+        }
 
         var maxFileSize = submissionRequestData.SubmissionFileType == SubmissionFileType.Code
-            ? MaxCodeFileSize
-            : MaxVideoFileSize;
+            ? SubmitterSettings.MaxCodeFileSize
+            : SubmitterSettings.MaxCodeFileSize;
 
         var fileError = ValidateFile(submissionRequestData.File, submissionRequestData.FileType, maxFileSize);
 
-        var submissionDataDictionary = GetSubmissionDataDictionaryByType(submissionRequestData.AssigmentType);
+        var submissionDataDictionary = GetSubmissionDataDictionaryByType(GetParsedAssignmentType(submissionRequestData.AssigmentType));
 
-        var assigmentMetaDataDictionary = submissionRequestData.SubmissionFileType == SubmissionFileType.Code
-            ? submissionDataDictionary[submissionRequestData.StudentData.StudentId].SubmittedAssignmentCodeFiles
-            : submissionDataDictionary[submissionRequestData.StudentData.StudentId].SubmittedAssignmentVideoFiles;
-        var maxAssignmentNumber = MaxAssignmentNumber[submissionRequestData.AssigmentType.ToString()];
+        // var assigmentMetaDataDictionary = submissionRequestData.SubmissionFileType == SubmissionFileType.Code
+        //     ? submissionDataDictionary.TryGetValue(submissionRequestData.StudentId, out var codeFilesSubmission)
+        //     : submissionDataDictionary[submissionRequestData.StudentId].SubmittedAssignmentVideoFiles;
 
-        if (studentDataErrors.Any())
+
+        var assigmentMetaDataDictionary =
+            submissionDataDictionary.TryGetValue(submissionRequestData.StudentId, out var currentSubmissionMetadata);
+
+        var currentFileSubmissionData = new Dictionary<int, AssignmentSubmisssion>();
+
+        
+        if (assigmentMetaDataDictionary) 
         {
-            errors.Add("StudentData", studentDataErrors);
-        }
-
-        if (!studentDataErrors.Any())
-        {
-            if (!GeneralSubmissionData.ContainsKey(submissionRequestData.StudentData.StudentId))
+            if (submissionRequestData.SubmissionFileType == SubmissionFileType.Code)
             {
-               errors.Add("StudentData",
-                    new Dictionary<string, string> { { "InvalidStudent", "Student Data does not exist" } });
-               return errors;
-
+                currentFileSubmissionData = currentSubmissionMetadata.SubmittedAssignmentCodeFiles;
+            }
+            else
+            {
+                currentFileSubmissionData = currentSubmissionMetadata.SubmittedAssignmentVideoFiles;
             }
         }
+        
+        Console.WriteLine($"gotten here {submissionRequestData.AssigmentType}");
 
+        var maxAssignmentNumber = SubmitterSettings.MaxAssignmentNumber[submissionRequestData.AssigmentType];
+        
         if (fileError.Any())
         {
             errors.Add("File", fileError);
@@ -963,7 +1030,7 @@ public static class Services
             errors.Add(nameof(submissionRequestData.AssignmentNumber), new Dictionary<string, string> { { "AssignmentNumber", "Assignment number exceeds max submittable number" } });
         }
 
-        if (!assigmentMetaDataDictionary[submissionRequestData.AssignmentNumber].CanBeResubmitted)
+        if (assigmentMetaDataDictionary && !currentFileSubmissionData[submissionRequestData.AssignmentNumber].CanBeResubmitted)
         {
             errors.Add(nameof(submissionRequestData.AssignmentNumber), new Dictionary<string, string> { { "AssignmentNumber", "This assignment file has been submitted and cannot be resubmitted" } });
         }
@@ -1035,6 +1102,10 @@ public static class Services
 
     public static async Task<IResult> SubmitAssignmentFile(FileSubmissionRequestModel submissionRequestData)
     {
+        
+        Console.WriteLine($"filled here {submissionRequestData.AssigmentType}");
+        
+        
         var validationErrors = ValidateSubmissionRequestData(submissionRequestData);
         if (validationErrors.Any())
         {
@@ -1045,9 +1116,11 @@ public static class Services
             });
         }
 
-        var submissionDataDictionary = GetSubmissionDataDictionaryByType(submissionRequestData.AssigmentType);
-        var submissionDataFilepath = GetSubmissionDataFilePathByType(submissionRequestData.AssigmentType);
+        var submissionDataDictionary = GetSubmissionDataDictionaryByType(GetParsedAssignmentType(submissionRequestData.AssigmentType));
+        var submissionDataFilepath = GetSubmissionDataFilePathByType(GetParsedAssignmentType(submissionRequestData.AssigmentType));
         var result = await submissionRequestData.SaveFileToStorage();
+        
+        Console.WriteLine(result);
 
         if (!result)
         {
@@ -1055,13 +1128,13 @@ public static class Services
                 { Status = FileSubmissionStatus.Failed, Message = "An Error Occured while Uploading File" });
         }
 
-        var data = submissionDataDictionary.TryGetValue(submissionRequestData.StudentData.StudentId,
+        var data = submissionDataDictionary.TryGetValue(submissionRequestData.StudentId,
             out var currentGeneralData);
 
         if (!data)
         {
             _fileActionsLogger.LogInformation(
-                $"submiting {submissionRequestData.AssigmentType} {submissionRequestData.SubmissionFileType.ToString()} file for student with id {submissionRequestData.StudentData.StudentId} assignment number {submissionRequestData.AssignmentNumber}");
+                $"submiting {submissionRequestData.AssigmentType} {submissionRequestData.SubmissionFileType.ToString()} file for student with id {submissionRequestData.StudentId} assignment number {submissionRequestData.AssignmentNumber}");
             var model = submissionRequestData.GenerateAddAssignmentSubmissionRequestDataModel();
             var status =
                 await model.AddAssignmentSubmissionDataToFile(submissionDataFilepath,
@@ -1074,7 +1147,7 @@ public static class Services
                     { Status = FileSubmissionStatus.Failed, Message = "An Error Occured while Uploading File" });
             }
 
-            submissionDataDictionary.Add(submissionRequestData.StudentData.StudentId, model);
+            submissionDataDictionary.Add(submissionRequestData.StudentId, model);
             return Results.Json(new
                 { Status = FileSubmissionStatus.Successfull, Message = "File Successfully Uploaded" });
         }

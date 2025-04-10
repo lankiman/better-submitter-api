@@ -1,56 +1,38 @@
- name: Better-Submitter Pipeline
- 
- on:
-   push:
-     branches:
-       - main
+name: Better-Submitter Pipeline
+
+on:
+  push:
+    branches:
+      - main
 
 jobs:
-  setup:
-    runs-on: ubuntu-latest
-    steps:
-     - name: checkout repository
-       uses: actions/checkout@v4
-       
-     - name: set up .net
-       uses: actions/setup-dotnet@v4
-       with:
-         dotnet-version: '9.0'
-     
-     - name: restore dependencies
-       run: dotnet restore
-     
-     - name: build application
-       run: dotnet build --configuration release 
-     
-     - name: Build project
-       run: dotnet build --configuration Release
-
-     - name: Create deployment package
-       run: dotnet publish --configuration Release --no-build --output ./publish
-
-     - name: Save build output
-       uses: actions/upload-artifact@v4
-       with:
-         name: application-files
-         path: ./publish
-  
   deploy:
-    needs: setup
     runs-on: ubuntu-latest
     steps:
-      - name: Get build output
-        uses: actions/download-artifact@v4
-        with:
-          name: application-files
-          path: ./app
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Setup SSH access
+      - name: Set up SSH access
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          known_hosts: ${{ secrets.EC2_KNOWN_HOSTS }}
-    
-      
-      
-  
+          known_hosts: ""
+
+      - name: SSH into VPS, stop service, pull latest changes, restore and restart app
+        run: |
+          ssh -o StrictHostKeyChecking=no -i <(echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}") ubuntu@${{ secrets.VPS_IP_ADDRESS }} << 'EOF'
+            # Stop the service
+            sudo systemctl stop better-submitter-api
+
+            # Navigate to the project directory
+            cd /home/ubuntu/better-submitter-api
+
+            # Pull the latest changes
+            git pull origin main
+
+            # Restore dependencies
+            dotnet restore
+
+            # Restart the service
+            sudo systemctl start better-submitter-api
+          EOF

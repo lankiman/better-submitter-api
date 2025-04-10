@@ -59,9 +59,9 @@ public static class Services
             },
             AssignmentNumber = new AssignmentNumber
             {
-                Java = 5,
-                C = 5,
-                Python = 5
+                Java = 15,
+                C = 15,
+                Python = 15
             },
             MaxCodeFileSize = 1 * 1024 * 1024,
             MaxVideoFileSize = 1000 * 1024 * 1024
@@ -189,7 +189,7 @@ public static class Services
     private static bool IsValidStudentId(string studentId)
     {
         string matNoPattern = @"^UG/\d{2}/\d{4}$";
-        string regNoPattern = @"^\d{8}[A-Z]{2}$";
+        string regNoPattern = @"^\d{12}[A-Z]{2}$";
         Regex matNoRegex = new(matNoPattern);
         Regex regNorRegex = new(regNoPattern);
         return (matNoRegex.IsMatch(studentId.ToUpper()) || regNorRegex.IsMatch(studentId.ToUpper()));
@@ -291,6 +291,13 @@ public static class Services
             }
         );
     }
+    
+    private static bool IsValidName(string name)
+    {
+        string namePattern = @"^[A-Za-z]+(-[A-Za-z]+)*$";
+        Regex nameRegex = new(namePattern);
+        return nameRegex.IsMatch(name);
+    }
 
 
     private static Dictionary<string, string> ValidateGeneralDataModel(GeneralDataModel model)
@@ -313,6 +320,20 @@ public static class Services
 
         AddErrorIfEmpty(model.Surname, nameof(model.Surname));
         AddErrorIfEmpty(model.Firstname, nameof(model.Firstname));
+
+
+        if (!string.IsNullOrWhiteSpace(model.Surname)&&!IsValidName(model.Surname))
+        {
+            errors.Add(nameof(model.Surname), "Invalid Surname format");
+        }
+        if (!string.IsNullOrWhiteSpace(model.Firstname)&&!IsValidName(model.Firstname))
+        {
+            errors.Add(nameof(model.Firstname), "Invalid Firstname format");
+        }
+        if (!string.IsNullOrWhiteSpace(model.Middlename)&&!IsValidName(model.Middlename))
+        {
+            errors.Add(nameof(model.Middlename), "Invalid Middename format");
+        }
 
         if (!Enum.TryParse<StudentDepartment>(model.Department.ToString(), true, out var parsedDepartment) ||
             !Enum.IsDefined(typeof(StudentDepartment), parsedDepartment))
@@ -392,6 +413,80 @@ public static class Services
 
         return true;
     }
+    
+    private static GeneralDataModel SanitizeGeneralDataModel(GeneralDataModel model)
+    {
+        if (model is null) return null;
+    
+        // Sanitize all text fields
+        model.Firstname = SanitizeName(model.Firstname);
+        model.Middlename = SanitizeName(model.Middlename);
+        model.Surname = SanitizeName(model.Surname);
+        model.StudentId = SanitizeStudentId(model.StudentId);
+        // Sanitize any other text fields
+    
+        return model;
+    }
+
+    private static string SanitizeText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+    
+        // Remove problematic characters and normalize formatting
+        return text.Replace("'", "")
+            .Replace("*", "")
+            .Replace(" _", "_")
+            .Replace("_ ", "_")
+            .Trim();
+    }
+    
+    private static string SanitizeName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return name;
+    
+        // Keep only letters and hyphens
+        string cleaned = System.Text.RegularExpressions.Regex.Replace(name, @"[^A-Za-z\-]", "");
+    
+        // Capitalize first letter, make rest lowercase
+        if (cleaned.Length > 0)
+        {
+            cleaned = char.ToUpper(cleaned[0]) + cleaned.Substring(1).ToLower();
+        }
+    
+        return cleaned;
+    }
+    // private static string SanitizeName(string name)
+    // {
+    //     if (string.IsNullOrEmpty(name)) return name;
+    //
+    //     // Remove problematic characters and normalize formatting
+    //     string cleaned = name.Replace("'", "")
+    //         .Replace("*", "")
+    //         .Replace(" _", "_")
+    //         .Replace("_ ", "_")
+    //         .Trim();
+    //
+    //     // Capitalize first letter, make rest lowercase
+    //     if (cleaned.Length > 0)
+    //     {
+    //         cleaned = char.ToUpper(cleaned[0]) + cleaned.Substring(1).ToLower();
+    //     }
+    //
+    //     return cleaned;
+    // }
+
+    private  static string SanitizeStudentId(string studentId)
+    {
+        if (string.IsNullOrEmpty(studentId)) return studentId;
+    
+        // Normalize student ID format (e.g., UG_22_3788)
+        var cleaned = SanitizeText(studentId);
+    
+        // Ensure proper formatting for student IDs
+        // This depends on your expected format
+        // Example: Match pattern like UG_22_3788
+        return cleaned;
+    }
 
     //endpoint actions for general data
     public static IResult CheckForGeneralStudentSubmissionData(string studentId)
@@ -421,6 +516,8 @@ public static class Services
         });
     }
 
+   
+
     public static async Task<IResult> AddGeneralStudentSubmissionData(GeneralDataModel generalStudentData)
     {
         if (generalStudentData == null)
@@ -428,7 +525,12 @@ public static class Services
             return Results.UnprocessableEntity("General Student Data is required");
         }
 
+      
+        
+        
         var validationErrors = ValidateGeneralDataModel(generalStudentData);
+        
+     
         if (validationErrors.Any())
         {
             return Results.BadRequest(new
@@ -456,6 +558,8 @@ public static class Services
                 Status = GeneralSubmissionDataStatus.Present.ToString(), Message = "General Student Data Already Exists"
             });
         }
+        // Sanitize the data before validation and processing
+        generalStudentData = SanitizeGeneralDataModel(generalStudentData);
 
         var status = await generalStudentData.AddGeneralDataToFile();
         if (!status)
@@ -681,9 +785,13 @@ public static class Services
         {
             id = ConvertMatricNumberToNamingFormat(data.StudentId);
         }
-
-        return
-            $"{data.Firstname}_{data.Surname}{(string.IsNullOrWhiteSpace(data.Middlename) ? "" : $"_{data.Middlename}_{id}")}";
+        
+        string result = $"{data.Firstname}_{data.Surname}";
+        if (!string.IsNullOrWhiteSpace(data.Middlename))
+            result += $"_{data.Middlename}";
+        result += $"_{id}";
+        
+        return result;
     }
 
     private static AssigmentType GetParsedAssignmentType(string assignmentType)

@@ -1,3 +1,43 @@
+#name: Better-Submitter Pipeline
+#
+#on:
+#  push:
+#    branches:
+#      - main
+#
+#jobs:
+#  deploy:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Checkout repository
+#        uses: actions/checkout@v4
+#
+#      - name: Set up SSH access
+#        uses: shimataro/ssh-key-action@v2
+#        with:
+#          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+#          known_hosts: null
+#
+#      - name: SSH into VPS, stop service, pull latest changes, restore and restart app
+#        run: |
+#          ssh -o StrictHostKeyChecking=no -i <(echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}") ubuntu@${{ secrets.VPS_IP_ADDRESS }} << 'EOF'
+#            # Stop the service
+#            sudo systemctl stop better-submitter-api
+#
+#            # Navigate to the project directory
+#            cd /home/ubuntu/better-submitter-api
+#
+#            # Pull the latest changes
+#            git pull origin main
+#
+#            # Restore dependencies
+#            dotnet restore
+#
+#            # Restart the service
+#            sudo systemctl start better-submitter-api
+#          EOF
+
+
 name: Better-Submitter Pipeline
 
 on:
@@ -12,15 +52,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up SSH access
-        uses: shimataro/ssh-key-action@v2
-        with:
-          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          known_hosts: null
-
       - name: SSH into VPS, stop service, pull latest changes, restore and restart app
         run: |
-          ssh -o StrictHostKeyChecking=no -i <(echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}") ubuntu@${{ secrets.VPS_IP_ADDRESS }} << 'EOF'
+          # Add SSH private key to the agent
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          # Disable strict host checking
+          echo -e "Host *\n\tStrictHostKeyChecking no\n\n" >> ~/.ssh/config
+
+          # SSH into the VPS
+          ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.VPS_IP_ADDRESS }} << 'EOF'
             # Stop the service
             sudo systemctl stop better-submitter-api
 
@@ -36,3 +78,4 @@ jobs:
             # Restart the service
             sudo systemctl start better-submitter-api
           EOF
+

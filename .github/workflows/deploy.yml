@@ -16,7 +16,7 @@ jobs:
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          known_hosts: ""
+          known_hosts: null
 
       - name: SSH into VPS, stop service, pull latest changes, restore and restart app
         run: |

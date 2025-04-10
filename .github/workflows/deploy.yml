@@ -54,14 +54,17 @@ jobs:
 
       - name: SSH into VPS, stop service, pull latest changes, restore and restart app
         run: |
-          # Add SSH private key to the agent
+          # Create the .ssh directory if it doesn't exist
+          mkdir -p ~/.ssh
+
+          # Add SSH private key directly to the file
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
           # Disable strict host checking
           echo -e "Host *\n\tStrictHostKeyChecking no\n\n" >> ~/.ssh/config
 
-          # SSH into the VPS
+          # SSH into the VPS without adding key to agent
           ssh -i ~/.ssh/id_rsa ubuntu@${{ secrets.VPS_IP_ADDRESS }} << 'EOF'
             # Stop the service
             sudo systemctl stop better-submitter-api

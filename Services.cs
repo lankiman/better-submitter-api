@@ -711,7 +711,8 @@ public static class Services
         return fileType switch
         {
             FileType.c => extension == ".c" &&
-                          (contentType == "text/x-c" ||
+                          (contentType == "text/x-csrc" ||
+                           contentType == "text/x-c" ||
                            contentType == "text/plain" ||
                            contentType == "application/octet-stream"),
 

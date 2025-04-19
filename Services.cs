@@ -167,13 +167,33 @@ public static class Services
         }
     }
 
-    private static void TryDeleteFile(string filePath)
+    // private static void TryDeleteFile(string filePath)
+    // {
+    //     try
+    //     {
+    //         if (File.Exists(filePath))
+    //         {
+    //             File.Delete(filePath);
+    //         }
+    //     }
+    //     catch (IOException exception)
+    //     {
+    //         Console.WriteLine(exception.Message);
+    //     }
+    //     catch (UnauthorizedAccessException exception)
+    //     {
+    //         Console.WriteLine(exception.Message);
+    //     }
+    // }
+    
+    private static async Task TryDeleteFile(string filePath)
     {
         try
         {
             if (File.Exists(filePath))
             {
-                File.Delete(filePath);
+                // Use FileIO for async file operations
+                await Task.Run(() => File.Delete(filePath));
             }
         }
         catch (IOException exception)
@@ -225,33 +245,7 @@ public static class Services
             );
     }
 
-    // private static Dictionary<string, SubmissionDataModel> ConvertToSubmissionsDataModel(this List<string> data)
-    // {
-    //     return data.Select(line => line.Split(",")).ToDictionary(
-    //         lineData => lineData[0],
-    //         lineData => new SubmissionDataModel
-    //         {
-    //             StudentId = lineData[0],
-    //             Department = Enum.Parse<StudentDepartment>(lineData[1]),
-    //             SubmittedAssignmentCodeFiles = lineData[2].Split("|").ToDictionary(
-    //                 codeFilesData => int.Parse(codeFilesData.Split("^")[0]),
-    //                 codeFilesData => new AssignmentSubmisssion
-    //                 {
-    //                     AssignmentNumber = int.Parse(codeFilesData.Split("^")[0]),
-    //                     SubmissionCount = int.Parse(codeFilesData.Split("^")[1]),
-    //                     CanBeResubmitted = bool.Parse(codeFilesData.Split("^")[2])
-    //                 }),
-    //             SubmittedAssignmentVideoFiles = lineData[3].Split("|").ToDictionary(
-    //                 videoFilesData => int.Parse(videoFilesData.Split("^")[0]),
-    //                 videoFilesData => new AssignmentSubmisssion
-    //                 {
-    //                     AssignmentNumber = int.Parse(videoFilesData.Split("^")[0]),
-    //                     SubmissionCount = int.Parse(videoFilesData.Split("^")[1]),
-    //                     CanBeResubmitted = bool.Parse(videoFilesData.Split("^")[2])
-    //                 }),
-    //         }
-    //     );
-    // }
+  
     
     private static Dictionary<string, SubmissionDataModel> ConvertToSubmissionsDataModel(this List<string> data)
     {
@@ -353,8 +347,8 @@ public static class Services
 
         try
         {
-            using var writer = new StreamWriter(_generalDataPath, append: true);
-            await writer.WriteLineAsync(data);
+           await using var writer = new StreamWriter(_generalDataPath, append: true);
+           await writer.WriteLineAsync(data);
             _dataActionsLogger.LogInformation($"student data with id {newData.StudentId} updated to file");
             return true;
         }
@@ -375,8 +369,8 @@ public static class Services
         var tempFilePath = GetRandomTempDataFilePath();
         try
         {
-            using var reader = new StreamReader(_generalDataPath);
-            using var writer = new StreamWriter(tempFilePath);
+           using var reader = new StreamReader(_generalDataPath);
+           await using var writer = new StreamWriter(tempFilePath);
 
             string? line;
 
@@ -396,7 +390,6 @@ public static class Services
                     await writer.WriteLineAsync(line);
                 }
             }
-
             File.Move(tempFilePath, _generalDataPath, true);
         }
         catch (Exception exception)
@@ -408,7 +401,7 @@ public static class Services
         }
         finally
         {
-            TryDeleteFile(tempFilePath);
+        await TryDeleteFile(tempFilePath);
         }
 
         return true;
@@ -455,25 +448,6 @@ public static class Services
     
         return cleaned;
     }
-    // private static string SanitizeName(string name)
-    // {
-    //     if (string.IsNullOrEmpty(name)) return name;
-    //
-    //     // Remove problematic characters and normalize formatting
-    //     string cleaned = name.Replace("'", "")
-    //         .Replace("*", "")
-    //         .Replace(" _", "_")
-    //         .Replace("_ ", "_")
-    //         .Trim();
-    //
-    //     // Capitalize first letter, make rest lowercase
-    //     if (cleaned.Length > 0)
-    //     {
-    //         cleaned = char.ToUpper(cleaned[0]) + cleaned.Substring(1).ToLower();
-    //     }
-    //
-    //     return cleaned;
-    // }
 
     private  static string SanitizeStudentId(string studentId)
     {
@@ -520,12 +494,10 @@ public static class Services
 
     public static async Task<IResult> AddGeneralStudentSubmissionData(GeneralDataModel generalStudentData)
     {
-        if (generalStudentData == null)
+        if (generalStudentData is null)
         {
             return Results.UnprocessableEntity("General Student Data is required");
         }
-
-      
         
         
         var validationErrors = ValidateGeneralDataModel(generalStudentData);
@@ -639,7 +611,7 @@ public static class Services
         });
     }
 
-    public static IResult GetAssignmentMetaData(string studentId, string assignmentType)
+    public static  IResult GetAssignmentMetaData(string studentId, string assignmentType)
     {
         Console.WriteLine($"gotten from meta data {assignmentType}");
         if (!Enum.TryParse<AssigmentType>(assignmentType, true, out var parsedAssignmentType) ||
@@ -850,7 +822,7 @@ public static class Services
         {
             _fileActionsLogger.LogInformation($"An error occured while saving file {fileName} to storage");
             _fileActionsLogger.LogError(exception.Message);
-            TryDeleteFile(filePath);
+          await TryDeleteFile(filePath);
             return false;
         }
     }
@@ -946,7 +918,7 @@ public static class Services
         try
         {
             using var reader = new StreamReader(filePath);
-            using var writer = new StreamWriter(tempFilePath);
+           await using var writer = new StreamWriter(tempFilePath);
 
             string? line;
 
@@ -983,7 +955,7 @@ public static class Services
         }
         finally
         {
-            TryDeleteFile(tempFilePath);
+            await TryDeleteFile(tempFilePath);
         }
 
         return true;
@@ -1033,50 +1005,7 @@ public static class Services
         };
     }
 
-    // private static SubmissionDataModel GenerateUpdateAssignmentSubmissionRequestDataModel(
-    //     this SubmissionDataModel currentGeneralData, int assignmentNumber, SubmissionFileType type)
-    // {
-    //     if (type == SubmissionFileType.Code)
-    //     {
-    //         var currentCodeSubmissionCount = currentGeneralData
-    //             .SubmittedAssignmentCodeFiles[assignmentNumber].SubmissionCount;
-    //         return new SubmissionDataModel
-    //         {
-    //             StudentId = currentGeneralData.StudentId,
-    //             Department = currentGeneralData.Department,
-    //             SubmittedAssignmentCodeFiles = new Dictionary<int, AssignmentSubmisssion>
-    //             {
-    //                 {
-    //                     assignmentNumber, new AssignmentSubmisssion
-    //                     {
-    //                         AssignmentNumber = assignmentNumber,
-    //                         SubmissionCount = currentCodeSubmissionCount + 1,
-    //                         CanBeResubmitted = (currentCodeSubmissionCount +1) < 2
-    //                     }
-    //                 }
-    //             }
-    //         };
-    //     }
-    //
-    //     var currentVideoSubmissionCount = currentGeneralData
-    //         .SubmittedAssignmentVideoFiles[assignmentNumber].SubmissionCount;
-    //     return new SubmissionDataModel
-    //     {
-    //         StudentId = currentGeneralData.StudentId,
-    //         Department = currentGeneralData.Department,
-    //         SubmittedAssignmentCodeFiles = new Dictionary<int, AssignmentSubmisssion>
-    //         {
-    //             {
-    //                 assignmentNumber, new AssignmentSubmisssion
-    //                 {
-    //                     AssignmentNumber = assignmentNumber,
-    //                     SubmissionCount = currentVideoSubmissionCount + 1,
-    //                     CanBeResubmitted = currentVideoSubmissionCount < 2
-    //                 }
-    //             }
-    //         }
-    //     };
-    // }
+ 
 
     private static SubmissionDataModel GenerateUpdateAssignmentSubmissionRequestDataModel(
     this SubmissionDataModel currentGeneralData, int assignmentNumber, SubmissionFileType type)
@@ -1207,37 +1136,6 @@ public static class Services
         }
     }
 }
-    // private static void UpdateAssignmentSubmissionDataToDictionary(
-    //     this FileSubmissionRequestModel submissionRequestModel, Dictionary<string, SubmissionDataModel> dictionary)
-    // {
-    //     var studentData = GetStudentData(submissionRequestModel.StudentId);
-    //     if (submissionRequestModel.SubmissionFileType == SubmissionFileType.Code)
-    //     {
-    //         var currentSubmissionCount = dictionary[studentData.StudentId]
-    //             .SubmittedAssignmentCodeFiles[submissionRequestModel.AssignmentNumber].SubmissionCount;
-    //         dictionary[studentData.StudentId]
-    //                 .SubmittedAssignmentCodeFiles[submissionRequestModel.AssignmentNumber].SubmissionCount =
-    //             currentSubmissionCount + 1;
-    //         currentSubmissionCount = dictionary[studentData.StudentId]
-    //             .SubmittedAssignmentCodeFiles[submissionRequestModel.AssignmentNumber].SubmissionCount;
-    //         dictionary[studentData.StudentId]
-    //                 .SubmittedAssignmentCodeFiles[submissionRequestModel.AssignmentNumber].CanBeResubmitted =
-    //             currentSubmissionCount < 2;
-    //     }
-    //     else
-    //     {
-    //         var currentSubmissionCount = dictionary[studentData.StudentId]
-    //             .SubmittedAssignmentVideoFiles[submissionRequestModel.AssignmentNumber].SubmissionCount;
-    //         dictionary[studentData.StudentId]
-    //                 .SubmittedAssignmentVideoFiles[submissionRequestModel.AssignmentNumber].SubmissionCount =
-    //             currentSubmissionCount + 1;
-    //         currentSubmissionCount = dictionary[studentData.StudentId]
-    //             .SubmittedAssignmentVideoFiles[submissionRequestModel.AssignmentNumber].SubmissionCount;
-    //         dictionary[studentData.StudentId]
-    //                 .SubmittedAssignmentVideoFiles[submissionRequestModel.AssignmentNumber].CanBeResubmitted =
-    //             currentSubmissionCount < 2;
-    //     }
-    // }
 
 
     private static Dictionary<string, Dictionary<string, string>> ValidateSubmissionRequestData(
@@ -1262,9 +1160,7 @@ public static class Services
 
         var submissionDataDictionary = GetSubmissionDataDictionaryByType(submissionRequestData.AssignmentType);
 
-        // var assigmentMetaDataDictionary = submissionRequestData.SubmissionFileType == SubmissionFileType.Code
-        //     ? submissionDataDictionary.TryGetValue(submissionRequestData.StudentId, out var codeFilesSubmission)
-        //     : submissionDataDictionary[submissionRequestData.StudentId].SubmittedAssignmentVideoFiles;
+       
 
 
         var assigmentMetaDataDictionary =
@@ -1317,11 +1213,7 @@ public static class Services
             errors.Add(nameof(submissionRequestData.AssignmentNumber), new Dictionary<string, string> { { "AssignmentNumber", "Assignment number exceeds max submittable number" } });
         }
 
-        // if (assigmentMetaDataDictionary && !currentFileSubmissionData[submissionRequestData.AssignmentNumber].CanBeResubmitted)
-        // {
-        //     errors.Add(nameof(submissionRequestData.AssignmentNumber), new Dictionary<string, string> { { "AssignmentNumber", "This assignment file has been submitted and cannot be resubmitted" } });
-        // }
-        
+       
         if (assigmentMetaDataDictionary && 
             currentFileSubmissionData.ContainsKey(submissionRequestData.AssignmentNumber) && 
             !currentFileSubmissionData[submissionRequestData.AssignmentNumber].CanBeResubmitted)
@@ -1395,80 +1287,7 @@ public static class Services
         });
     }
 
-    //public endpoint actions for file submissions
 
-//     public static async Task<IResult> SubmitAssignmentFile(FileSubmissionRequestModel submissionRequestData)
-//     {
-//         
-//         Console.WriteLine($"filled here {submissionRequestData.AssignmentType}");
-//         
-//         
-//         var validationErrors = ValidateSubmissionRequestData(submissionRequestData);
-//         if (validationErrors.Any())
-//         {
-//             return Results.Json(new
-//             {
-//                 Status = FileSubmissionStatus.Failed.ToString(), Errors = validationErrors,
-//                 Message = "Validation Errors"
-//             });
-//         }
-//
-//         var submissionDataDictionary = GetSubmissionDataDictionaryByType(submissionRequestData.AssignmentType);
-//         var submissionDataFilepath = GetSubmissionDataFilePathByType(submissionRequestData.AssignmentType);
-//         var result = await submissionRequestData.SaveFileToStorage();
-//         
-//         Console.WriteLine(result);
-//
-//         if (!result)
-//         {
-//             return Results.Json(new
-//                 { Status = FileSubmissionStatus.Failed, Message = "An Error Occured while Uploading File" });
-//         }
-//
-//         var data = submissionDataDictionary.TryGetValue(submissionRequestData.StudentId,
-//             out var currentGeneralData);
-//
-//         if (!data)
-//         {
-//             _fileActionsLogger.LogInformation(
-//                 $"submiting {submissionRequestData.AssignmentType} {submissionRequestData.SubmissionFileType.ToString()} file for student with id {submissionRequestData.StudentId} assignment number {submissionRequestData.AssignmentNumber}");
-//             var model = submissionRequestData.GenerateAddAssignmentSubmissionRequestDataModel();
-//             var status =
-//                 await model.AddAssignmentSubmissionDataToFile(submissionDataFilepath,
-//                     submissionRequestData.SubmissionFileType);
-//             if (!status)
-//             {
-//                 var (filePath, _) = ComputeSubmissionFilePath(submissionRequestData);
-//                 TryDeleteFile(filePath);
-//                 return Results.Json(new
-//                     { Status = FileSubmissionStatus.Failed, Message = "An Error Occured while Uploading File" });
-//             }
-//
-//             submissionDataDictionary.Add(submissionRequestData.StudentId, model);
-//             return Results.Json(new
-//                 { Status = FileSubmissionStatus.Successfull, Message = "File Successfully Uploaded" });
-//         }
-//
-//         var updatedGeneralData =
-//             currentGeneralData.GenerateUpdateAssignmentSubmissionRequestDataModel(
-//                 submissionRequestData.AssignmentNumber,
-//                 submissionRequestData.SubmissionFileType);
-//
-//         var updateResultStatus =
-//             await updatedGeneralData.UpdateAssignmentSubmissionDataToFile(submissionDataFilepath,
-//                 submissionRequestData.SubmissionFileType);
-//
-//         if (!updateResultStatus)
-//         {
-//             var (filePath, _) = ComputeSubmissionFilePath(submissionRequestData);
-//             TryDeleteFile(filePath);
-//             return Results.Json(new
-//                 { Status = FileSubmissionStatus.Failed, Message = "An Error Occured while Uploading File" });
-//         }
-//
-//         submissionRequestData.UpdateAssignmentSubmissionDataToDictionary(submissionDataDictionary);
-//         return Results.Json(new { Status = FileSubmissionStatus.Successfull, Message = "File Successfully Uploaded" });
-//     }
 
 public static async Task<IResult> SubmitAssignmentFile(FileSubmissionRequestModel submissionRequestData)
 {
@@ -1520,7 +1339,7 @@ public static async Task<IResult> SubmitAssignmentFile(FileSubmissionRequestMode
                 
             if (!status)
             {
-                TryDeleteFile(filePath);
+               await TryDeleteFile(filePath);
                 return Results.Json(new
                 { 
                     Status = FileSubmissionStatus.Failed, 
@@ -1546,7 +1365,7 @@ public static async Task<IResult> SubmitAssignmentFile(FileSubmissionRequestMode
 
         if (!updateResultStatus)
         {
-            TryDeleteFile(filePath);
+           await TryDeleteFile(filePath);
             return Results.InternalServerError(new
             { 
                 Status = FileSubmissionStatus.Failed, 
@@ -1565,7 +1384,7 @@ public static async Task<IResult> SubmitAssignmentFile(FileSubmissionRequestMode
     {
         // If any exception occurs, delete the file and log the error
         var (filePath, _) = ComputeSubmissionFilePath(submissionRequestData);
-        TryDeleteFile(filePath);
+        await TryDeleteFile(filePath);
         _fileActionsLogger.LogError(ex, "Error processing submission");
         
         return Results.InternalServerError(new
